@@ -1,7 +1,7 @@
 # Planning method: prioritising goals and committing to sprints
 
-Status: **proposal**. This is the method sNext is built around. The parts not built
-yet are listed at the end.
+Status: **adopted**. This is the method sNext is built around; implementation status is
+at the end.
 
 ## What sNext is for (and not for)
 
@@ -60,16 +60,14 @@ three 1-5 scales, which takes about two minutes a goal:
 | **Urgency**: cost of waiting a sprint | none | value decays | deadline / blocking others |
 | **Unblocks**: enables other goals or reduces risk | none | some | key dependency |
 
-**Size** is a T-shirt estimate of how much of one sprint's capacity the goal takes:
+**Size is not estimated.** A goal is defined so it fits in one sprint for the people who
+own it. Every team member should own a goal each sprint. A goal that genuinely needs two
+people says so (`people: 2`) and takes two slots. Anything bigger is not a goal yet;
+split it.
 
-| Size | XS | S | M | L |
-|---|---|---|---|---|
-| Share of sprint | ~10% | ~20% | ~35% | ~60% |
-
-Anything bigger than L is not a goal yet; split it.
-
-**Score = (Value + Urgency + Unblocks) / Size points** (XS=1, S=2, M=3, L=5). That's
-weighted shortest job first: high cost of delay and small size float up.
+**Score = (Value + Urgency + Unblocks) / people.** That's weighted shortest job first with
+people as the job size: high cost of delay floats up, and goals that tie up several
+people need to earn it.
 
 Order goals by **project rank first, then score within the project**, with two
 exceptions:
@@ -83,11 +81,12 @@ The score is there to start the argument, not to end it.
 
 ## Step 3: fill sprints from the ranked list
 
-1. **Plan to about 70-80% of capacity.** Reserve the rest for support, incidents and
-   unplanned work. Reserve the KTLO share from step 1 explicitly.
+1. **Capacity is people**: one goal per team member per sprint. Make support and
+   incident cover an explicit goal (e.g. a KTLO area with a "support rota" goal each
+   sprint) rather than a hidden reserve.
 2. Walk the ranked list and drop goals into the current sprint, then the next ones,
-   until each is full. Respect each area's capacity split within a sprint where
-   possible.
+   until every person has one. Areas are interleaved by their share, so the split
+   from step 1 holds across sprints.
 3. After the visible sprints, the list continues as **Next** (the following few sprints
    of capacity) and **Future** (ranked but not scheduled). This is a Now / Next / Later
    roadmap that falls straight out of the ranking.
@@ -131,28 +130,23 @@ metrics:
 | During sprint | Agent | Roll up Jira progress, flag risk | Cheap sync |
 | Sprint review | Team (+ leadership) | Close goals: met / missed, roll over | Close sprint, say/do metric |
 
-## What this means for the current build
+## Implementation status
 
-Already built and kept: the hierarchy, manual ranking, sprint settings and capacity
-packing, pins, the Next and Future buckets, team metrics, Jira links and the agent sync.
+Built:
 
-To build:
+- Area > Project > **Goal** hierarchy; area `share`, project stack rank and deadline.
+- Goal scoring (value / urgency / unblocks / people) and ranking as described above,
+  with reasons, in the **Priorities** tab (inline scoring) and `snext rank`.
+- People-based sprint board (**Sprints** tab, `snext plan`): one goal per team member,
+  pins, Next / Future, deadline risk, members without a goal.
+- Sprint **commit** and **close** with added / dropped tracking, outcomes, notes,
+  roll-over, and automatic say/do and unplanned metrics. One markdown file per sprint.
+- **Roadmap** tab and `snext report`: a self-contained HTML page for leadership.
+- Jira progress roll-up (done / total) through the agent.
 
-1. Rename the third level from **task** to **goal** in the UI, CLI and docs.
-2. Add **value / urgency / unblocks / size** fields and the computed score. Order is
-   project rank, then score, with manual override. Replace points with T-shirt size
-   (or keep points as an option).
-3. **Capacity reserve** (planned load %) and **area capacity split** in settings.
-4. **Sprint commitments**: `snext sprint commit`, added/dropped tracking,
-   `snext sprint close` with outcomes and roll-over. One markdown file per sprint
-   (`sprints/sprint-22.md`) as the permanent record.
-5. Automatic **say/do** and **planned vs unplanned** metrics from sprint closes.
-6. **Roadmap view** for leadership: projects as rows, sprints / Next / Future as
-   columns, showing committed vs proposed and outcomes for past sprints, plus capacity
-   by area against the agreed split.
-7. **Shareable snapshot**: since the app runs on localhost, `snext report` exports a
-   static HTML or markdown page of the roadmap and last sprint's results to send to
-   leadership or paste into Confluence.
-8. Jira roll-up: a goal links to an epic, a JQL filter or a set of tickets; the agent
-   sync reports progress (done / total) instead of mirroring a single status.
-9. Drop or demote the daily-task framing (the **Next** tab becomes the ranked goal list).
+Not built yet (candidates):
+
+- Per-sprint capacity overrides (leave, on-call) and partial availability.
+- Reading Jira sprint membership as pins.
+- History of project rank changes, to show leadership how priorities moved.
+- Publishing the report somewhere shared automatically (Confluence, a static host).

@@ -9,69 +9,87 @@ export interface SprintSettings {
   start: string;
   /** Sprint length in weeks. */
   weeks: number;
-  /** How many sprints the timeline shows individually. */
+  /** How many sprints the board shows individually. */
   count: number;
-  /** Points per sprint. */
-  capacity: number;
-  /** Points assumed for tasks without an estimate. */
-  defaultEstimate: number;
   /** How many sprints' worth of capacity the "Next" bucket holds; the rest is "Future". */
   nextSprints: number;
+  /** Goals per sprint when no team is listed. With a team, capacity is one goal per member. */
+  capacity: number;
 }
 
 export interface Settings {
   sprint: SprintSettings;
+  /** Team members; each should own a goal every sprint. */
+  team: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  sprint: { start: "2026-01-05", weeks: 2, count: 3, capacity: 10, defaultEstimate: 1, nextSprints: 3 },
+  sprint: { start: "2026-01-05", weeks: 2, count: 3, nextSprints: 3, capacity: 5 },
+  team: [],
 };
 
-const BODY = `Board settings for sNext. Edit with \`snext sprint config\` or by hand.`;
+/** Goals per sprint: one per team member, or the configured capacity without a team. */
+export function sprintCapacity(settings: Settings): number {
+  return settings.team.length || settings.sprint.capacity;
+}
+
+const BODY = "Board settings for sNext. Edit with `snext sprint config` or by hand.";
 
 export function readSettings(dir: string): Settings {
   if (!fs.existsSync(paths.settings(dir))) return structuredClone(DEFAULT_SETTINGS);
   const { data } = readFrontmatter(paths.settings(dir));
   const sprint = (data.sprint ?? {}) as Partial<Record<keyof SprintSettings, unknown>>;
   const d = DEFAULT_SETTINGS.sprint;
-  const num = (v: unknown, fallback: number) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : fallback);
+  const num = (v: unknown, fallback: number) => (v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : fallback);
   return {
     sprint: {
       start: sprint.start instanceof Date ? sprint.start.toISOString().slice(0, 10) : String(sprint.start ?? d.start),
       weeks: num(sprint.weeks, d.weeks),
       count: num(sprint.count, d.count),
-      capacity: num(sprint.capacity, d.capacity),
-      defaultEstimate: num(sprint.defaultEstimate, d.defaultEstimate),
       nextSprints: num(sprint.nextSprints, d.nextSprints),
+      capacity: num(sprint.capacity, d.capacity),
     },
+    team: Array.isArray(data.team) ? data.team.map(String).filter(Boolean) : [],
   };
 }
 
-export function updateSprintSettings(dir: string, patch: Partial<SprintSettings>, actor: string): Settings {
+export interface SettingsPatch {
+  sprint?: Partial<SprintSettings>;
+  team?: string[];
+}
+
+export function updateSettings(dir: string, patch: SettingsPatch, actor: string): Settings {
   const current = readSettings(dir);
-  const next: SprintSettings = { ...current.sprint };
-  for (const [k, v] of Object.entries(patch) as [keyof SprintSettings, unknown][]) {
+  const next: Settings = { sprint: { ...current.sprint }, team: [...current.team] };
+  for (const [k, v] of Object.entries(patch.sprint ?? {}) as [keyof SprintSettings, unknown][]) {
     if (v === undefined) continue;
     if (k === "start") {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v)) || Number.isNaN(Date.parse(String(v)))) {
         throw new SnextError(`invalid sprint start "${v}" (YYYY-MM-DD)`);
       }
-      next.start = String(v);
-    } else {
+      next.sprint.start = String(v);
+    } else if (k in next.sprint) {
       const n = Number(v);
-      const min = k === "defaultEstimate" ? 0 : 1;
-      const ok = Number.isFinite(n) && n >= min && (k === "capacity" || k === "defaultEstimate" || Number.isInteger(n));
-      if (!ok) throw new SnextError(`invalid ${k} "${v}"`);
-      next[k] = n;
+      if (!Number.isInteger(n) || n < 1) throw new SnextError(`invalid ${k} "${v}" (a whole number >= 1)`);
+      next.sprint[k] = n;
+    } else {
+      throw new SnextError(`unknown sprint setting "${k}"`);
     }
   }
-  const changes: Record<string, FieldChange> = {};
-  for (const k of Object.keys(next) as (keyof SprintSettings)[]) {
-    if (next[k] !== current.sprint[k]) changes[`sprint.${k}`] = { from: current.sprint[k], to: next[k] };
+  if (patch.team) {
+    const team = [...new Set(patch.team.map((t) => t.trim()).filter(Boolean))];
+    next.team = team;
   }
+
+  const changes: Record<string, FieldChange> = {};
+  for (const k of Object.keys(next.sprint) as (keyof SprintSettings)[]) {
+    if (next.sprint[k] !== current.sprint[k]) changes[`sprint.${k}`] = { from: current.sprint[k], to: next.sprint[k] };
+  }
+  if (next.team.join("\n") !== current.team.join("\n")) changes.team = { from: current.team.join(", "), to: next.team.join(", ") };
   if (!Object.keys(changes).length) return current;
+
   fs.mkdirSync(dir, { recursive: true });
-  writeFrontmatter(paths.settings(dir), { sprint: next }, BODY);
-  appendLog(dir, { ts: new Date().toISOString(), actor, op: "update", id: "settings", type: "settings", title: "Sprint settings", changes });
-  return { sprint: next };
+  writeFrontmatter(paths.settings(dir), { sprint: next.sprint, team: next.team }, BODY);
+  appendLog(dir, { ts: new Date().toISOString(), actor, op: "update", id: "settings", type: "settings", title: "Board settings", changes });
+  return next;
 }

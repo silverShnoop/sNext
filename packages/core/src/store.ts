@@ -7,13 +7,15 @@ import { paths } from "./paths.js";
 import {
   ID_PREFIX,
   ITEM_TYPES,
+  OPTIONAL_FIELDS,
   PARENT_TYPE,
-  PRIORITIES,
+  SCORE_FACTORS,
   STATUSES,
   SnextError,
   type CreateItemInput,
   type FieldChange,
   type Item,
+  type ItemFields,
   type ItemLink,
   type ItemType,
   type LogEntry,
@@ -109,7 +111,7 @@ export class Store {
     const title = input.title?.trim();
     if (!title) throw new SnextError("title is required");
     this.checkParent(input.type, input.parent);
-    validateFields(input);
+    validateFields(input.type, input);
 
     const now = new Date().toISOString();
     const siblings = this.list({ type: input.type }).filter((i) => i.parent === input.parent);
@@ -120,15 +122,12 @@ export class Store {
       description: input.description ?? "",
       parent: input.parent || undefined,
       status: input.status ?? "todo",
-      priority: input.priority,
       rank: (siblings.at(-1)?.rank ?? 0) + RANK_STEP,
-      due: input.due,
-      estimate: input.estimate,
-      sprint: input.sprint,
       links: (input.links ?? []).map(normalizeLink),
       created: now,
       updated: now,
     };
+    applyOptional(item, input);
     item.id = this.writeNew(item);
     this.log("create", item, actor);
     return item;
@@ -136,8 +135,7 @@ export class Store {
 
   update(id: string, patch: UpdateItemInput, actor: string): Item {
     const item = this.get(id);
-    validateFields(patch);
-    const changes: Record<string, FieldChange> = {};
+    validateFields(item.type, patch);
     const next: Item = { ...item };
 
     if (patch.title !== undefined) {
@@ -147,13 +145,12 @@ export class Store {
     }
     if (patch.description !== undefined) next.description = patch.description;
     if (patch.status !== undefined) next.status = patch.status;
-    if (patch.priority !== undefined) next.priority = patch.priority ?? undefined;
-    if (patch.due !== undefined) next.due = patch.due ?? undefined;
-    if (patch.estimate !== undefined) next.estimate = patch.estimate ?? undefined;
-    if (patch.sprint !== undefined) next.sprint = patch.sprint ?? undefined;
+    applyOptional(next, patch);
 
-    for (const k of ["title", "description", "status", "priority", "due", "estimate", "sprint"] as const) {
-      if (item[k] !== next[k]) changes[k] = { from: item[k] ?? null, to: next[k] ?? null };
+    const changes: Record<string, FieldChange> = {};
+    for (const k of ["title", "description", "status", ...OPTIONAL_FIELDS] as const) {
+      const [a, b] = [item[k] ?? null, next[k] ?? null];
+      if (JSON.stringify(a) !== JSON.stringify(b)) changes[k] = { from: a, to: b };
     }
     if (!Object.keys(changes).length) return item;
     return this.save(next, "update", actor, changes);
@@ -298,9 +295,9 @@ export class Store {
 }
 
 export function typeForId(id: string): ItemType {
-  const prefix = /^([APT])-\d+$/i.exec(id)?.[1]?.toUpperCase();
+  const prefix = /^([APG])-\d+$/i.exec(id)?.[1]?.toUpperCase();
   const type = ITEM_TYPES.find((t) => ID_PREFIX[t] === prefix);
-  if (!type) throw new SnextError(`invalid id "${id}" (expected A-n, P-n or T-n)`, "not_found");
+  if (!type) throw new SnextError(`invalid id "${id}" (expected A-n, P-n or G-n)`, "not_found");
   return type;
 }
 
@@ -308,26 +305,51 @@ export function sortItems(items: Item[]): Item[] {
   return [...items].sort((a, b) => a.rank - b.rank || a.created.localeCompare(b.created));
 }
 
-function validateFields(input: {
-  status?: unknown;
-  priority?: unknown;
-  due?: unknown;
-  estimate?: unknown;
-  sprint?: unknown;
-}): void {
-  if (input.estimate != null && !(typeof input.estimate === "number" && input.estimate >= 0)) {
-    throw new SnextError(`invalid estimate "${input.estimate}" (a number of points >= 0)`);
+/** Fields that only make sense on one item type. */
+const FIELD_TYPE: Partial<Record<(typeof OPTIONAL_FIELDS)[number], ItemType>> = {
+  share: "area",
+  value: "goal",
+  urgency: "goal",
+  unblocks: "goal",
+  people: "goal",
+  owners: "goal",
+  sprint: "goal",
+};
+
+function applyOptional(item: Item, input: ItemFields): void {
+  for (const k of OPTIONAL_FIELDS) {
+    const v = input[k];
+    if (v === undefined) continue;
+    const cleared = v === null || (Array.isArray(v) && !v.length);
+    (item as unknown as Record<string, unknown>)[k] = cleared ? undefined : v;
   }
-  if (input.sprint != null && !(Number.isInteger(input.sprint) && (input.sprint as number) >= 1)) {
+}
+
+function validateFields(type: ItemType, input: ItemFields): void {
+  for (const [k, only] of Object.entries(FIELD_TYPE)) {
+    const v = input[k as keyof ItemFields];
+    if (v != null && only !== type) throw new SnextError(`${k} applies to ${only}s, not ${type}s`);
+  }
+  for (const k of SCORE_FACTORS) {
+    const v = input[k];
+    if (v != null && !(Number.isInteger(v) && v >= 1 && v <= 5)) throw new SnextError(`invalid ${k} "${v}" (1-5)`);
+  }
+  if (input.people != null && !(Number.isInteger(input.people) && input.people >= 1)) {
+    throw new SnextError(`invalid people "${input.people}" (a whole number >= 1)`);
+  }
+  if (input.share != null && !(typeof input.share === "number" && input.share >= 0 && input.share <= 100)) {
+    throw new SnextError(`invalid share "${input.share}" (0-100 percent)`);
+  }
+  if (input.owners != null && !(Array.isArray(input.owners) && input.owners.every((o) => typeof o === "string" && o.trim()))) {
+    throw new SnextError("owners must be a list of names");
+  }
+  if (input.sprint != null && !(Number.isInteger(input.sprint) && input.sprint >= 1)) {
     throw new SnextError(`invalid sprint "${input.sprint}" (a sprint number >= 1)`);
   }
   if (input.status !== undefined && !STATUSES.includes(input.status as never)) {
     throw new SnextError(`invalid status "${input.status}" (${STATUSES.join(", ")})`);
   }
-  if (input.priority != null && !PRIORITIES.includes(input.priority as never)) {
-    throw new SnextError(`invalid priority "${input.priority}" (${PRIORITIES.join(", ")})`);
-  }
-  if (input.due != null && !DATE.test(String(input.due))) {
+  if (input.due != null && (!DATE.test(String(input.due)) || Number.isNaN(Date.parse(String(input.due))))) {
     throw new SnextError(`invalid due date "${input.due}" (YYYY-MM-DD)`);
   }
 }

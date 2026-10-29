@@ -4,12 +4,19 @@ import { ActivityView } from "./ActivityView";
 import { Editor, type EditorTarget } from "./Editor";
 import { HierarchyView } from "./HierarchyView";
 import { MetricsStrip } from "./MetricsStrip";
-import { NextView } from "./NextView";
-import { TimelineView } from "./TimelineView";
+import { PrioritiesView } from "./PrioritiesView";
+import { RoadmapView } from "./RoadmapView";
+import { SprintsView } from "./SprintsView";
 
-type View = "hierarchy" | "next" | "timeline" | "activity";
+type View = "roadmap" | "sprints" | "priorities" | "hierarchy" | "activity";
 
-const VIEW_LABEL: Record<View, string> = { hierarchy: "Hierarchy", next: "Next", timeline: "Timeline", activity: "Activity" };
+const VIEW_LABEL: Record<View, string> = {
+  roadmap: "Roadmap",
+  sprints: "Sprints",
+  priorities: "Priorities",
+  hierarchy: "Hierarchy",
+  activity: "Activity",
+};
 
 function stored<T>(key: string, fallback: T): T {
   try {
@@ -33,7 +40,10 @@ export function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [view, setView] = useState<View>(() => stored("snext.view", "hierarchy"));
+  const [view, setView] = useState<View>(() => {
+    const v = stored<string>("snext.view", "sprints");
+    return v in VIEW_LABEL ? (v as View) : "sprints";
+  });
   const [editing, setEditing] = useState<EditorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<Set<string>>(new Set());
@@ -123,10 +133,11 @@ export function App() {
       )}
 
       <main>
-        <MetricsStrip metrics={metrics} flash={flash} />
+        {view !== "roadmap" && <MetricsStrip metrics={metrics} flash={flash} />}
+        {view === "roadmap" && <RoadmapView changeTick={changeTick} />}
+        {view === "sprints" && <SprintsView {...ctx} />}
+        {view === "priorities" && <PrioritiesView {...ctx} changeTick={changeTick} />}
         {view === "hierarchy" && <HierarchyView {...ctx} />}
-        {view === "next" && <NextView {...ctx} changeTick={changeTick} />}
-        {view === "timeline" && <TimelineView {...ctx} />}
         {view === "activity" && <ActivityView changeTick={changeTick} byId={byId} edit={ctx.edit} />}
       </main>
 

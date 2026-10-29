@@ -2,27 +2,23 @@ import { normalizeLink } from "./links.js";
 import type { Store } from "./store.js";
 import {
   ITEM_TYPES,
+  OPTIONAL_FIELDS,
   PARENT_TYPE,
   SnextError,
   type Item,
+  type ItemFields,
   type ItemLink,
   type ItemType,
-  type Priority,
-  type Status,
 } from "./types.js";
 
 /**
  * A nested tree an agent can produce in one go, e.g. from a Jira epic listing.
- * `type` may be omitted and is inferred from depth (area > project > task).
+ * `type` may be omitted and is inferred from depth (area > project > goal).
  */
-export interface ImportNode {
-  type?: ItemType;
+export interface ImportNode extends Omit<ItemFields, "description"> {
+  type?: ItemType | "task";
   title: string;
   description?: string;
-  status?: Status;
-  priority?: Priority;
-  due?: string;
-  estimate?: number;
   links?: (string | ItemLink)[];
   children?: ImportNode[];
 }
@@ -59,24 +55,19 @@ function upsert(
   actor: string,
   report: ImportReport,
 ): void {
-  const type = node.type ?? expected;
+  const type = node.type === "task" ? "goal" : (node.type ?? expected);
   if (type !== expected) throw new SnextError(`"${node.title}" is a ${type} but a ${expected} was expected here`);
   const links = (node.links ?? []).map((l) => normalizeLink(typeof l === "string" ? { url: l } : l));
+  const fields: ItemFields = { description: node.description, status: node.status };
+  for (const k of OPTIONAL_FIELDS) if (node[k] !== undefined) (fields as Record<string, unknown>)[k] = node[k];
 
   let item = match(store, type, parent, node.title, links);
   if (!item) {
-    item = store.create(
-      { type, title: node.title, description: node.description, parent, status: node.status, priority: node.priority, due: node.due, estimate: node.estimate, links },
-      actor,
-    );
+    item = store.create({ type, title: node.title, parent, links, ...fields }, actor);
     report.created.push(item.id);
   } else {
     const before = item.updated;
-    item = store.update(
-      item.id,
-      { title: node.title, description: node.description, status: node.status, priority: node.priority, due: node.due, estimate: node.estimate },
-      actor,
-    );
+    item = store.update(item.id, { title: node.title, ...fields }, actor);
     for (const link of links) {
       if (!item.links.some((l) => l.url === link.url)) item = store.addLink(item.id, link, actor);
     }
@@ -84,7 +75,7 @@ function upsert(
   }
 
   if (node.children?.length) {
-    if (type === "task") throw new SnextError(`task "${node.title}" cannot have children`);
+    if (type === "goal") throw new SnextError(`goal "${node.title}" cannot have children`);
     for (const child of node.children) upsert(store, child, childType(type), item.id, actor, report);
   }
 }

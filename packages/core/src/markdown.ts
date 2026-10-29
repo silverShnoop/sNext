@@ -1,12 +1,5 @@
 import { parse, stringify } from "yaml";
-import {
-  ITEM_TYPES,
-  PRIORITIES,
-  STATUSES,
-  SnextError,
-  type Item,
-  type ItemLink,
-} from "./types.js";
+import { ITEM_TYPES, OPTIONAL_FIELDS, STATUSES, SnextError, type Item, type ItemLink } from "./types.js";
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
@@ -22,11 +15,11 @@ export function serializeItem(item: Item): string {
   };
   if (item.parent) front.parent = item.parent;
   front.status = item.status;
-  if (item.priority) front.priority = item.priority;
   front.rank = item.rank;
-  if (item.due) front.due = item.due;
-  if (item.estimate != null) front.estimate = item.estimate;
-  if (item.sprint != null) front.sprint = item.sprint;
+  for (const k of OPTIONAL_FIELDS) {
+    const v = item[k];
+    if (v != null && !(Array.isArray(v) && !v.length)) front[k] = v;
+  }
   if (item.links.length) front.links = item.links.map(cleanLink);
   front.created = item.created;
   front.updated = item.updated;
@@ -41,18 +34,18 @@ export function parseItem(text: string, source = "item"): Item {
   const str = (k: string) => (front[k] == null ? undefined : String(front[k]));
 
   const id = str("id");
-  const type = str("type");
+  const type = str("type") === "task" ? "goal" : str("type"); // pre-rename files
   const title = str("title");
   if (!id || !title) throw new SnextError(`${source}: id and title are required`);
   if (!ITEM_TYPES.includes(type as never)) throw new SnextError(`${source}: invalid type "${type}"`);
 
   const status = str("status") ?? "todo";
-  const priority = str("priority");
   const links = Array.isArray(front.links)
     ? (front.links as Record<string, unknown>[])
         .filter((l) => l && typeof l.url === "string")
         .map((l) => cleanLink(l as unknown as ItemLink))
     : [];
+  const owners = Array.isArray(front.owners) ? front.owners.map(String).filter(Boolean) : undefined;
 
   return {
     id,
@@ -61,10 +54,14 @@ export function parseItem(text: string, source = "item"): Item {
     description: match[2]!.trim(),
     parent: str("parent"),
     status: (STATUSES.includes(status as never) ? status : "todo") as Item["status"],
-    priority: PRIORITIES.includes(priority as never) ? (priority as Item["priority"]) : undefined,
     rank: Number(front.rank) || 0,
     due: normalizeDate(front.due),
-    estimate: optionalNumber(front.estimate),
+    share: optionalNumber(front.share),
+    value: optionalNumber(front.value),
+    urgency: optionalNumber(front.urgency),
+    unblocks: optionalNumber(front.unblocks),
+    people: optionalNumber(front.people),
+    owners: owners?.length ? owners : undefined,
     sprint: optionalNumber(front.sprint),
     links,
     created: str("created") ?? new Date(0).toISOString(),
@@ -74,7 +71,7 @@ export function parseItem(text: string, source = "item"): Item {
 
 function cleanLink(link: ItemLink): ItemLink {
   const out: ItemLink = { url: String(link.url) };
-  for (const k of ["system", "key", "title", "externalStatus", "syncedAt"] as const) {
+  for (const k of ["system", "key", "title", "externalStatus", "progress", "syncedAt"] as const) {
     if (link[k] != null && link[k] !== "") out[k] = String(link[k]);
   }
   return out;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Item } from "./api";
 import type { Ctx } from "./App";
-import { childrenOf, DueBadge, LinkChips, PriorityBadge, ProgressBar, progress, StatusBadge } from "./shared";
+import { childrenOf, DueBadge, LinkChips, Owners, ProgressBar, progress, ScoreBadge, StatusBadge } from "./shared";
 
 function useStoredState<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -37,7 +37,7 @@ export function HierarchyView(ctx: Ctx) {
       <div className="empty">
         <h2>Nothing here yet</h2>
         <p>
-          Ask your agent to populate sNext (e.g. <code>/snext pull my Jira epics in</code>), or start by hand.
+          Ask your agent to set up your areas, projects and goals (e.g. <code>/snext set up our Q4 projects from Jira</code>), or start by hand.
         </p>
         <button className="primary" onClick={() => create("area")}>+ New area</button>
       </div>
@@ -79,6 +79,7 @@ export function HierarchyView(ctx: Ctx) {
                 key={p.id}
                 project={p}
                 area={area}
+                position={idx + 1}
                 open={openProjects.includes(p.id)}
                 onToggle={() => toggleProject(p.id)}
                 prev={arr[idx - 1]}
@@ -121,14 +122,14 @@ function AreaCard({ area, open, onToggle, prev, next, ...ctx }: Ctx & { area: It
     >
       <div className="card-top">
         <span className="id">{area.id}</span>
-        <PriorityBadge priority={area.priority} />
+        {area.share != null && <span className="badge share" title="agreed capacity share">{area.share}%</span>}
         <Reorder item={area} prev={prev} next={next} run={ctx.run} />
       </div>
       <h3>{area.title}</h3>
       {area.description && <p className="desc clamp">{area.description}</p>}
       <div className="card-foot">
         <span className="muted">
-          {projects.length} project{projects.length === 1 ? "" : "s"} · {p.done}/{p.total} tasks
+          {projects.length} project{projects.length === 1 ? "" : "s"} · {p.done}/{p.total} goals
         </span>
       </div>
       <ProgressBar {...p} />
@@ -139,12 +140,13 @@ function AreaCard({ area, open, onToggle, prev, next, ...ctx }: Ctx & { area: It
 function ProjectCard({
   project,
   area,
+  position,
   open,
   onToggle,
   prev,
   next,
   ...ctx
-}: Ctx & { project: Item; area: Item; open: boolean; onToggle: () => void; prev?: Item; next?: Item }) {
+}: Ctx & { project: Item; area: Item; position: number; open: boolean; onToggle: () => void; prev?: Item; next?: Item }) {
   const tasks = childrenOf(ctx.items, project.id);
   const p = progress(ctx.items, [project.id]);
   const [withDone, setWithDone] = useState(false);
@@ -161,8 +163,8 @@ function ProjectCard({
       >
         <span className="chev" aria-hidden>{open ? "▾" : "▸"}</span>
         <span className="id">{project.id}</span>
+        <span className="pos" title="stack rank within the area">#{position}</span>
         <span className="title">{project.title}</span>
-        <PriorityBadge priority={project.priority ?? area.priority} inherited={!project.priority} />
         {project.status !== "todo" && <StatusBadge status={project.status} />}
         <DueBadge due={project.due} />
         <LinkChips links={project.links} />
@@ -178,10 +180,10 @@ function ProjectCard({
         <div className="tasks">
           {project.description && <p className="desc project-desc">{project.description}</p>}
           {visible.map((t, idx) => (
-            <TaskRow key={t.id} task={t} inherited={project.priority ?? area.priority} prev={visible[idx - 1]} next={visible[idx + 1]} {...ctx} />
+            <GoalRow key={t.id} task={t} prev={visible[idx - 1]} next={visible[idx + 1]} {...ctx} />
           ))}
           <div className="tasks-foot">
-            <button className="link" onClick={() => ctx.create("task", project.id)}>+ Task</button>
+            <button className="link" onClick={() => ctx.create("goal", project.id)}>+ Goal</button>
             {tasks.length !== visible.length || withDone ? (
               <button className="link muted" onClick={() => setWithDone(!withDone)}>
                 {withDone ? "hide done" : `show ${tasks.length - visible.length} done`}
@@ -194,7 +196,7 @@ function ProjectCard({
   );
 }
 
-function TaskRow({ task, inherited, prev, next, ...ctx }: Ctx & { task: Item; inherited?: Item["priority"]; prev?: Item; next?: Item }) {
+function GoalRow({ task, prev, next, ...ctx }: Ctx & { task: Item; prev?: Item; next?: Item }) {
   const done = task.status === "done";
   return (
     <div className={`task${done ? " is-done" : ""}${ctx.flash.has(task.id) ? " flash" : ""}`} onClick={() => ctx.edit(task)}>
@@ -211,8 +213,10 @@ function TaskRow({ task, inherited, prev, next, ...ctx }: Ctx & { task: Item; in
       <span className="id">{task.id}</span>
       <span className="title">{task.title}</span>
       {(task.status === "in_progress" || task.status === "blocked") && <StatusBadge status={task.status} />}
-      <PriorityBadge priority={task.priority ?? inherited} inherited={!task.priority} />
+      <ScoreBadge item={task} />
+      {task.sprint != null && <span className="badge pin">sprint {task.sprint}</span>}
       <DueBadge due={task.due} />
+      <Owners owners={task.owners} />
       <LinkChips links={task.links} />
       <span className="spacer" />
       <Reorder item={task} prev={prev} next={next} run={ctx.run} />

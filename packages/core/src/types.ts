@@ -1,25 +1,25 @@
-export const ITEM_TYPES = ["area", "project", "task"] as const;
+export const ITEM_TYPES = ["area", "project", "goal"] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 
 export const STATUSES = ["todo", "in_progress", "blocked", "done"] as const;
 export type Status = (typeof STATUSES)[number];
 
-/** Ordered most to least important. */
-export const PRIORITIES = ["critical", "high", "medium", "low"] as const;
-export type Priority = (typeof PRIORITIES)[number];
-
 /** The type an item's parent must have (areas are top level). */
 export const PARENT_TYPE: Record<ItemType, ItemType | null> = {
   area: null,
   project: "area",
-  task: "project",
+  goal: "project",
 };
 
 export const ID_PREFIX: Record<ItemType, string> = {
   area: "A",
   project: "P",
-  task: "T",
+  goal: "G",
 };
+
+/** Lightweight WSJF factors, each scored 1-5. */
+export const SCORE_FACTORS = ["value", "urgency", "unblocks"] as const;
+export type ScoreFactor = (typeof SCORE_FACTORS)[number];
 
 export interface ItemLink {
   url: string;
@@ -30,6 +30,8 @@ export interface ItemLink {
   title?: string;
   /** Last status reported by the external system (via `snext sync apply`). */
   externalStatus?: string;
+  /** Roll-up of child tickets, e.g. "4/7" done (for epics or ticket groups). */
+  progress?: string;
   syncedAt?: string;
 }
 
@@ -41,43 +43,65 @@ export interface Item {
   description: string;
   parent?: string;
   status: Status;
-  priority?: Priority;
-  /** Manual ordering among siblings; lower comes first. */
+  /** Manual ordering among siblings; lower comes first. For projects this is the stack rank. */
   rank: number;
-  /** ISO date (YYYY-MM-DD). */
+  /** Hard deadline (YYYY-MM-DD). Deadlines are the only thing allowed to jump the rank. */
   due?: string;
-  /** Size in points, used for sprint capacity (tasks only). */
-  estimate?: number;
-  /** Pin a task to an absolute sprint number instead of auto-scheduling it. */
+  /** Areas: share of team capacity in percent (the investment split). */
+  share?: number;
+  /** Goals: value to users / business / risk, 1-5. */
+  value?: number;
+  /** Goals: cost of waiting a sprint, 1-5. */
+  urgency?: number;
+  /** Goals: how much it unblocks other work or reduces risk, 1-5. */
+  unblocks?: number;
+  /** Goals: how many team members it needs for the sprint (default 1). */
+  people?: number;
+  /** Goals: team members who own it. */
+  owners?: string[];
+  /** Goals: pinned to an absolute sprint number instead of being scheduled by rank. */
   sprint?: number;
   links: ItemLink[];
   created: string;
   updated: string;
 }
 
-export interface CreateItemInput {
+/** Fields settable on create and update; `null` clears an optional field on update. */
+export interface ItemFields {
+  description?: string;
+  status?: Status;
+  due?: string | null;
+  share?: number | null;
+  value?: number | null;
+  urgency?: number | null;
+  unblocks?: number | null;
+  people?: number | null;
+  owners?: string[] | null;
+  sprint?: number | null;
+}
+
+export interface CreateItemInput extends ItemFields {
   type: ItemType;
   title: string;
-  description?: string;
   parent?: string;
-  status?: Status;
-  priority?: Priority;
-  due?: string;
-  estimate?: number;
-  sprint?: number;
   links?: ItemLink[];
 }
 
-/** `null` clears an optional field. */
-export interface UpdateItemInput {
+export interface UpdateItemInput extends ItemFields {
   title?: string;
-  description?: string;
-  status?: Status;
-  priority?: Priority | null;
-  due?: string | null;
-  estimate?: number | null;
-  sprint?: number | null;
 }
+
+/** Optional fields in file order; used for serialisation and change detection. */
+export const OPTIONAL_FIELDS = [
+  "due",
+  "share",
+  "value",
+  "urgency",
+  "unblocks",
+  "people",
+  "owners",
+  "sprint",
+] as const satisfies readonly (keyof Item)[];
 
 export interface MoveItemInput {
   parent?: string;
@@ -87,10 +111,20 @@ export interface MoveItemInput {
   after?: string;
 }
 
-export type LogOp = "create" | "update" | "delete" | "move" | "link" | "unlink" | "sync" | "record";
+export type LogOp =
+  | "create"
+  | "update"
+  | "delete"
+  | "move"
+  | "link"
+  | "unlink"
+  | "sync"
+  | "record"
+  | "commit"
+  | "close";
 
-/** What a log entry is about: an item, a metric, or the board settings. */
-export type LogSubject = ItemType | "metric" | "settings";
+/** What a log entry is about: an item, a metric, a sprint, or the board settings. */
+export type LogSubject = ItemType | "metric" | "sprint" | "settings";
 
 export interface FieldChange {
   from: unknown;

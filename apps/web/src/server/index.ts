@@ -5,20 +5,29 @@ import { fileURLToPath } from "node:url";
 import {
   SnextError,
   Store,
+  buildRoadmap,
   buildTimeline,
+  closeSprint,
+  commitSprint,
+  dropGoal,
   importTree,
-  listMetrics,
   listAgents,
+  listMetrics,
+  listSprints,
   logSize,
-  nextTasks,
   paths,
+  rankGoals,
   readLog,
   readSettings,
+  setSprintSummary,
   summarizeMetric,
   tailLog,
-  updateSprintSettings,
+  updateSettings,
+  type CloseOptions,
   type ImportNode,
+  type SettingsPatch,
 } from "@snext/core";
+import { renderReport } from "./report.js";
 
 export const DEFAULT_PORT = 4317;
 
@@ -80,30 +89,43 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     if (resource === "events" && method === "GET") return openEvents(req, res);
     if (resource === "agents") return json(res, listAgents(opts.dir));
     if (resource === "log") return json(res, tailLog(opts.dir, Number(url.searchParams.get("limit") ?? 100)).reverse());
-    if (resource === "next") {
-      const limit = Number(url.searchParams.get("limit") ?? 0) || undefined;
+    if (resource === "rank" && method === "GET") {
       const within = url.searchParams.get("within") ?? undefined;
-      return json(
-        res,
-        nextTasks(store.list(), { limit, within }).map((n) => ({
-          item: n.item,
-          project: n.project && { id: n.project.id, title: n.project.title },
-          area: n.area && { id: n.area.id, title: n.area.title },
-          effectivePriority: n.effectivePriority,
-          reasons: n.reasons,
-        })),
-      );
+      return json(res, rankGoals(store.list(), { within }).map(slim));
     }
-    if (resource === "metrics" && method === "GET") {
-      return json(res, listMetrics(opts.dir).map((m) => ({ ...m, summary: summarizeMetric(m) })));
-    }
+    if (resource === "metrics" && method === "GET") return json(res, metricsWithSummary());
     if (resource === "timeline" && method === "GET") {
-      return json(res, buildTimeline(store.list(), readSettings(opts.dir).sprint));
+      const t = buildTimeline(store.list(), readSettings(opts.dir), listSprints(opts.dir));
+      return json(res, { ...t, buckets: t.buckets.map((b) => ({ ...b, goals: b.goals.map(slim) })) });
+    }
+    if (resource === "roadmap" && method === "GET") return json(res, roadmap());
+    if (resource === "report" && method === "GET") {
+      const html = renderReport(roadmap(), metricsWithSummary());
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        ...(url.searchParams.get("download") ? { "content-disposition": `attachment; filename="snext-report-${html.date}.html"` } : {}),
+      });
+      return res.end(html.html);
+    }
+    if (resource === "sprints") {
+      if (!id && method === "GET") return json(res, listSprints(opts.dir));
+      const n = Number(id);
+      if (sub === "commit" && method === "POST") {
+        const body = (await readBody(req)) as { force?: boolean };
+        return json(res, commitSprint(store, UI_ACTOR, { sprint: n, force: body.force }));
+      }
+      if (sub === "close" && method === "POST") {
+        const body = (await readBody(req)) as Omit<CloseOptions, "sprint" | "today">;
+        return json(res, closeSprint(store, UI_ACTOR, { ...body, sprint: n }));
+      }
+      if (sub === "summary" && method === "PUT") {
+        const body = (await readBody(req)) as { summary?: string };
+        return json(res, setSprintSummary(opts.dir, n, body.summary ?? "", UI_ACTOR));
+      }
     }
     if (resource === "settings" && method === "GET") return json(res, readSettings(opts.dir));
     if (resource === "settings" && method === "PATCH") {
-      const body = (await readBody(req)) as { sprint?: Record<string, unknown> };
-      return json(res, updateSprintSettings(opts.dir, body.sprint ?? {}, UI_ACTOR));
+      return json(res, updateSettings(opts.dir, (await readBody(req)) as SettingsPatch, UI_ACTOR));
     }
     if (resource === "import" && method === "POST") {
       const body = (await readBody(req)) as { parent?: string; items: ImportNode[] };
@@ -118,6 +140,10 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         const deleted = store.delete(id, { recursive: url.searchParams.get("recursive") === "1" }, UI_ACTOR);
         return json(res, deleted.map((i) => i.id));
       }
+      if (id && sub === "drop" && method === "POST") {
+        const body = (await readBody(req)) as { note?: string };
+        return json(res, dropGoal(store, id, UI_ACTOR, body.note));
+      }
       if (id && sub === "move" && method === "POST") return json(res, store.move(id, (await readBody(req)) as never, UI_ACTOR));
       if (id && sub === "links" && method === "POST") return json(res, store.addLink(id, (await readBody(req)) as never, UI_ACTOR));
       if (id && sub === "links" && method === "DELETE") {
@@ -125,6 +151,15 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       }
     }
     throw new SnextError(`no route for ${method} ${url.pathname}`, "not_found");
+  }
+
+  function metricsWithSummary() {
+    return listMetrics(opts.dir).map((m) => ({ ...m, summary: summarizeMetric(m) }));
+  }
+
+  function roadmap() {
+    const r = buildRoadmap(store.list(), readSettings(opts.dir), listSprints(opts.dir));
+    return { ...r, timeline: { ...r.timeline, buckets: r.timeline.buckets.map((b) => ({ ...b, goals: b.goals.map(slim) })) } };
   }
 
   function openEvents(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -220,6 +255,15 @@ function guardRequest(req: http.IncomingMessage, method: string) {
   }
 }
 
+/** Ranked/planned goals reference their project and area by id and title only. */
+function slim<T extends { project?: { id: string; title: string }; area?: { id: string; title: string } }>(g: T) {
+  return {
+    ...g,
+    project: g.project && { id: g.project.id, title: g.project.title },
+    area: g.area && { id: g.area.id, title: g.area.title },
+  };
+}
+
 function serveStatic(res: http.ServerResponse, root: string, pathname: string) {
   const safe = path.normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, "");
   let file = path.join(root, safe);
@@ -259,3 +303,4 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
     throw new SnextError("request body must be JSON");
   }
 }
+export { renderReport } from "./report.js";

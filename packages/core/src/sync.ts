@@ -24,7 +24,11 @@ export interface SyncPlan {
 
 export interface SyncResult {
   key: string;
-  status: string;
+  /** Current status of the linked issue (omit when only reporting progress). */
+  status?: string;
+  /** For an epic or ticket group: child tickets done and total. */
+  done?: number;
+  total?: number;
   /** Jira statusCategory key or name: new / indeterminate / done, or To Do / In Progress / Done. */
   statusCategory?: string;
 }
@@ -78,11 +82,20 @@ export function syncApply(
 
     const changes: Record<string, FieldChange> = {};
     const next: Item = { ...item, links: [...item.links] };
-    if (link.externalStatus !== result.status) {
+    const nextLink = { ...link };
+    if (result.status != null && link.externalStatus !== result.status) {
       changes.externalStatus = { from: link.externalStatus ?? null, to: result.status };
-      next.links[linkIdx] = { ...link, externalStatus: result.status, syncedAt: now };
+      nextLink.externalStatus = result.status;
     }
-    const mapped = mapStatus ? mapExternalStatus(result) : undefined;
+    if (result.total != null) {
+      const progress = `${result.done ?? 0}/${result.total}`;
+      if (link.progress !== progress) {
+        changes.progress = { from: link.progress ?? null, to: progress };
+        nextLink.progress = progress;
+      }
+    }
+    if (Object.keys(changes).length) next.links[linkIdx] = { ...nextLink, syncedAt: now };
+    const mapped = mapStatus && result.status != null ? mapExternalStatus(result as Required<Pick<SyncResult, "status">> & SyncResult) : undefined;
     if (mapped && mapped !== item.status) {
       changes.status = { from: item.status, to: mapped };
       next.status = mapped;
@@ -101,7 +114,7 @@ export function syncApply(
 }
 
 /** Map an external status to an sNext status; undefined means "leave alone". */
-export function mapExternalStatus(result: Pick<SyncResult, "status" | "statusCategory">): Status | undefined {
+export function mapExternalStatus(result: { status: string; statusCategory?: string }): Status | undefined {
   const name = result.status.trim().toLowerCase();
   if (/\bblock/.test(name)) return "blocked";
   const cat = result.statusCategory?.trim().toLowerCase();
