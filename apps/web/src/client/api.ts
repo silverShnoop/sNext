@@ -99,6 +99,8 @@ export interface SprintSettings {
 }
 
 export interface Settings {
+  name: string;
+  tagline: string;
   sprint: SprintSettings;
   team: string[];
 }
@@ -232,7 +234,9 @@ export const api = {
   metrics: () => call<Metric[]>("GET", "/metrics"),
   timeline: () => call<Timeline>("GET", "/timeline"),
   roadmap: () => call<Roadmap>("GET", "/roadmap"),
-  updateSettings: (patch: { sprint?: Partial<SprintSettings>; team?: string[] }) => call<Settings>("PATCH", "/settings", patch),
+  updateSettings: (patch: { name?: string; tagline?: string; sprint?: Partial<SprintSettings>; team?: string[] }) =>
+    call<Settings>("PATCH", "/settings", patch),
+  setSprintSummary: (n: number, summary: string) => call<SprintRecord>("PUT", `/sprints/${n}/summary`, { summary }),
   commitSprint: (n: number, force = false) => call<SprintRecord>("POST", `/sprints/${n}/commit`, { force }),
   closeSprint: (
     n: number,

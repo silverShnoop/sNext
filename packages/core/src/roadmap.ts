@@ -55,6 +55,9 @@ export interface Roadmap {
   capacity: number;
   /** Most recent closed sprint, for "how did the last sprint go". */
   lastClosed?: SprintRecord;
+  /** Record of the current sprint once committed (its summary is the sprint focus). */
+  current?: SprintRecord;
+  settings: Settings;
   timeline: Timeline;
 }
 
@@ -170,7 +173,9 @@ export function buildRoadmap(items: Item[], settings: Settings, records: SprintR
     areas: out,
     team: settings.team,
     capacity: timeline.capacity,
-    lastClosed: records.filter((r) => r.status === "closed").at(-1),
+    lastClosed: records.filter((r) => r.status === "closed" && r.number < current).at(-1) ?? records.filter((r) => r.status === "closed").at(-1),
+    current: records.find((r) => r.number === current),
+    settings,
     timeline,
   };
 }

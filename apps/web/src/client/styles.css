@@ -386,3 +386,4 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
   .planned { width: auto; }
   .ranking-bar, .roadmap-bar { flex-wrap: wrap; }
 }
+.tagline-field { grid-column: span 2; }

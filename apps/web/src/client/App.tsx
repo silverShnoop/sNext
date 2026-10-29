@@ -8,10 +8,10 @@ import { PrioritiesView } from "./PrioritiesView";
 import { RoadmapView } from "./RoadmapView";
 import { SprintsView } from "./SprintsView";
 
-type View = "roadmap" | "sprints" | "priorities" | "hierarchy" | "activity";
+type View = "bulletin" | "sprints" | "priorities" | "hierarchy" | "activity";
 
 const VIEW_LABEL: Record<View, string> = {
-  roadmap: "Roadmap",
+  bulletin: "Bulletin",
   sprints: "Sprints",
   priorities: "Priorities",
   hierarchy: "Hierarchy",
@@ -41,8 +41,8 @@ export function App() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [view, setView] = useState<View>(() => {
-    const v = stored<string>("snext.view", "sprints");
-    return v in VIEW_LABEL ? (v as View) : "sprints";
+    const v = stored<string>("snext.view", "bulletin");
+    return v in VIEW_LABEL ? (v as View) : "bulletin";
   });
   const [editing, setEditing] = useState<EditorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,8 +133,8 @@ export function App() {
       )}
 
       <main>
-        {view !== "roadmap" && <MetricsStrip metrics={metrics} flash={flash} />}
-        {view === "roadmap" && <RoadmapView changeTick={changeTick} />}
+        {view !== "bulletin" && <MetricsStrip metrics={metrics} flash={flash} />}
+        {view === "bulletin" && <RoadmapView changeTick={changeTick} />}
         {view === "sprints" && <SprintsView {...ctx} />}
         {view === "priorities" && <PrioritiesView {...ctx} changeTick={changeTick} />}
         {view === "hierarchy" && <HierarchyView {...ctx} />}

@@ -14,6 +14,7 @@ export function SprintsView({ timeline, edit, run, flash }: Ctx) {
   const [editing, setEditing] = useState(false);
   const [closing, setClosing] = useState<TimelineBucket | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [focusing, setFocusing] = useState<number | null>(null);
   if (!timeline) return null;
   const { settings } = timeline;
   const s = settings.sprint;
@@ -89,6 +90,11 @@ export function SprintsView({ timeline, edit, run, flash }: Ctx) {
                       </button>
                     )}
                     {b.status === "committed" && (
+                      <button className="small-btn" onClick={() => setFocusing(b.number!)} title="A short note on this sprint's focus, shown at the top of the bulletin">
+                        Focus note
+                      </button>
+                    )}
+                    {b.status === "committed" && (
                       <button className="small-btn" onClick={() => setClosing(b)}>
                         Close sprint
                       </button>
@@ -112,6 +118,7 @@ export function SprintsView({ timeline, edit, run, flash }: Ctx) {
         })}
       </div>
       {closing && <CloseSprint bucket={closing} run={run} onDone={() => setClosing(null)} />}
+      {focusing != null && <FocusNote sprint={focusing} run={run} onDone={() => setFocusing(null)} />}
     </section>
   );
 }
@@ -229,9 +236,51 @@ function CloseSprint({ bucket, run, onDone }: { bucket: TimelineBucket; run: Ctx
   );
 }
 
+function FocusNote({ sprint, run, onDone }: { sprint: number; run: Ctx["run"]; onDone: () => void }) {
+  const [text, setText] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    fetch("/api/sprints")
+      .then((r) => r.json())
+      .then((records: { number: number; summary: string }[]) => setText(records.find((r) => r.number === sprint)?.summary ?? ""))
+      .finally(() => setLoaded(true));
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onDone();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sprint, onDone]);
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onDone()}>
+      <form
+        className="modal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() => api.setSprintSummary(sprint, text)).then(onDone);
+        }}
+      >
+        <div className="modal-head">
+          <strong>Sprint {sprint} focus</strong>
+          <button type="button" className="icon" aria-label="Close" onClick={onDone}>✕</button>
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>
+          A few sentences for other teams: what this sprint is about and why it matters. Shown at the top of the bulletin; replaced by the recap when you close the
+          sprint (you can edit it then).
+        </p>
+        <textarea rows={6} disabled={!loaded} placeholder="This sprint we're getting partial refunds in front of real merchants…" value={text} onChange={(e) => setText(e.target.value)} />
+        <div className="modal-foot">
+          <span className="spacer" />
+          <button type="button" onClick={onDone}>Cancel</button>
+          <button type="submit" className="primary">Save</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function SettingsForm({ settings, run, onDone }: { settings: Settings; run: Ctx["run"]; onDone: () => void }) {
   const [form, setForm] = useState(settings.sprint);
   const [team, setTeam] = useState(settings.team.join(", "));
+  const [name, setName] = useState(settings.name);
+  const [tagline, setTagline] = useState(settings.tagline);
   const field = (k: keyof Settings["sprint"], label: string, type: "number" | "date" = "number") => (
     <label>
       {label}
@@ -250,9 +299,17 @@ function SettingsForm({ settings, run, onDone }: { settings: Settings; run: Ctx[
       className="settings-form"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => api.updateSettings({ sprint: form, team: team.split(",").map((t) => t.trim()).filter(Boolean) })).then(onDone);
+        run(() => api.updateSettings({ name, tagline, sprint: form, team: team.split(",").map((t) => t.trim()).filter(Boolean) })).then(onDone);
       }}
     >
+      <label>
+        Team name (bulletin masthead)
+        <input placeholder="Payments Team" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="tagline-field">
+        Tagline
+        <input placeholder="Making it easy to get paid" value={tagline} onChange={(e) => setTagline(e.target.value)} />
+      </label>
       <label className="team-field">
         Team members (one goal each per sprint)
         <input placeholder="Ana, Ben, Cal" value={team} onChange={(e) => setTeam(e.target.value)} />

@@ -18,12 +18,18 @@ export interface SprintSettings {
 }
 
 export interface Settings {
+  /** Team name for the bulletin masthead. */
+  name: string;
+  /** One-line mission or tagline shown under the name. */
+  tagline: string;
   sprint: SprintSettings;
   /** Team members; each should own a goal every sprint. */
   team: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  name: "",
+  tagline: "",
   sprint: { start: "2026-01-05", weeks: 2, count: 3, nextSprints: 3, capacity: 5 },
   team: [],
 };
@@ -42,6 +48,8 @@ export function readSettings(dir: string): Settings {
   const d = DEFAULT_SETTINGS.sprint;
   const num = (v: unknown, fallback: number) => (v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : fallback);
   return {
+    name: data.name == null ? "" : String(data.name),
+    tagline: data.tagline == null ? "" : String(data.tagline),
     sprint: {
       start: sprint.start instanceof Date ? sprint.start.toISOString().slice(0, 10) : String(sprint.start ?? d.start),
       weeks: num(sprint.weeks, d.weeks),
@@ -54,13 +62,17 @@ export function readSettings(dir: string): Settings {
 }
 
 export interface SettingsPatch {
+  name?: string;
+  tagline?: string;
   sprint?: Partial<SprintSettings>;
   team?: string[];
 }
 
 export function updateSettings(dir: string, patch: SettingsPatch, actor: string): Settings {
   const current = readSettings(dir);
-  const next: Settings = { sprint: { ...current.sprint }, team: [...current.team] };
+  const next: Settings = { ...current, sprint: { ...current.sprint }, team: [...current.team] };
+  if (patch.name !== undefined) next.name = patch.name.trim();
+  if (patch.tagline !== undefined) next.tagline = patch.tagline.trim();
   for (const [k, v] of Object.entries(patch.sprint ?? {}) as [keyof SprintSettings, unknown][]) {
     if (v === undefined) continue;
     if (k === "start") {
@@ -85,11 +97,14 @@ export function updateSettings(dir: string, patch: SettingsPatch, actor: string)
   for (const k of Object.keys(next.sprint) as (keyof SprintSettings)[]) {
     if (next.sprint[k] !== current.sprint[k]) changes[`sprint.${k}`] = { from: current.sprint[k], to: next.sprint[k] };
   }
+  for (const k of ["name", "tagline"] as const) {
+    if (next[k] !== current[k]) changes[k] = { from: current[k] || null, to: next[k] || null };
+  }
   if (next.team.join("\n") !== current.team.join("\n")) changes.team = { from: current.team.join(", "), to: next.team.join(", ") };
   if (!Object.keys(changes).length) return current;
 
   fs.mkdirSync(dir, { recursive: true });
-  writeFrontmatter(paths.settings(dir), { sprint: next.sprint, team: next.team }, BODY);
+  writeFrontmatter(paths.settings(dir), { name: next.name, tagline: next.tagline, sprint: next.sprint, team: next.team }, BODY);
   appendLog(dir, { ts: new Date().toISOString(), actor, op: "update", id: "settings", type: "settings", title: "Board settings", changes });
   return next;
 }

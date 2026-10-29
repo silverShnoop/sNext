@@ -118,9 +118,15 @@ then **Next** (`nextSprints` sprints of capacity) and **Future** (unbounded):
 with target vs planned capacity share) against columns for the last closed sprints (with
 outcomes and say/do), the board's sprints (committed or proposed), Next and Future.
 
-`renderReport` (in `@snext/web`) turns it, plus the metrics, into one self-contained
-HTML page with no external assets: the **Roadmap** tab shows it, `GET /api/report`
-serves it, and `snext report` writes it to a file to email, attach or upload.
+`renderReport` (in `@snext/web`) turns it, plus the metrics, into the **team bulletin**:
+one self-contained HTML page with no external assets, written for readers outside the
+team. It has a masthead (team name and tagline from settings, sprint progress), headline
+stats, the sprint focus note (the current sprint record's summary) and goal cards, the
+last sprint's recap, metrics, capacity split, plan lanes, deadlines and who's on what.
+Areas get colours from a validated categorical palette, keyed by area id so a colour
+never changes when ranks do. Outcomes use status colours, always paired with an icon and
+a label. Light and dark modes are both supported. The **Bulletin** tab shows it,
+`GET /api/report` serves it, and `snext report` writes it to a file.
 
 ## Metrics
 

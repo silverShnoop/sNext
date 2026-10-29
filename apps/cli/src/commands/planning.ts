@@ -98,6 +98,8 @@ export function registerPlanning(program: Command) {
   sprint
     .command("config")
     .description("show or change the team and sprint settings (no options shows them)")
+    .option("--name <name>", "team name for the bulletin")
+    .option("--tagline <text>", "one-line mission shown under the team name")
     .option("--team <names>", "comma-separated team members; capacity is one goal each per sprint")
     .option("--start <date>", "first day of sprint 1, YYYY-MM-DD")
     .option("--weeks <n>", "weeks per sprint")
@@ -110,6 +112,8 @@ export function registerPlanning(program: Command) {
         const settings = updateSettings(
           c.dir,
           {
+            name: o.name,
+            tagline: o.tagline,
             sprint: {
               start: o.start,
               weeks: num(o.weeks, "weeks"),
@@ -125,6 +129,7 @@ export function registerPlanning(program: Command) {
         const current = sprintNumberFor(s, new Date().toISOString().slice(0, 10));
         print(c.json, { ...settings, currentSprint: current }, () =>
           [
+            settings.name ? `team: ${settings.name}${settings.tagline ? ` - ${settings.tagline}` : ""}` : "no team name set (--name)",
             `sprint 1 starts ${s.start}, ${s.weeks} week(s) each; current sprint: ${current}`,
             `showing ${s.count} sprints, then Next (${s.nextSprints} sprints), then Future`,
             settings.team.length ? `team (${settings.team.length}): ${settings.team.join(", ")}` : `no team set; ${s.capacity} goals per sprint`,
@@ -196,7 +201,7 @@ export function registerPlanning(program: Command) {
 
   sprint
     .command("summary")
-    .description("set the summary shown to leadership for a sprint")
+    .description("set a sprint's summary: the focus for the current sprint, the recap once closed (shown in the bulletin)")
     .argument("<sprint>")
     .argument("<markdown>")
     .action(

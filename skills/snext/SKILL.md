@@ -97,8 +97,9 @@ snext sprint drop G-12 [--note "why"]                  # take a goal out of its 
 snext sprint close [N] [--met ids] [--partial ids] [--missed ids] [--dropped ids]
                    [--note G-12="text"] [--rollover] [--summary "markdown"]
 snext sprint list | show N | summary N "markdown"
-snext roadmap --json                                   # leadership view as data
-snext report [-o file.html] [--open]                   # self-contained HTML for leadership
+snext roadmap --json                                   # the plan as data
+snext report [-o file.html] [--open]                   # the team bulletin: one self-contained HTML page
+snext sprint config --name "Payments Team" --tagline "..."   # bulletin masthead
 
 snext metric list|show ID | add "Name" [-u %] [--direction up|down|neutral] [--target N]
 snext metric record ID VALUE [--date DATE] [--note ..] | import ID [FILE|-] | unrecord ID DATE
@@ -138,7 +139,23 @@ mention.
 2. `snext --actor claude sprint close --met G-1,G-4 --partial G-3 --missed G-5 --note G-3="..." --summary "..."`.
    `--rollover` pins unfinished goals to the next sprint; without it they return to the
    ranking. Draft the summary for leadership: 2-3 sentences on outcomes, not activity.
-3. Offer `snext report --open` to produce the page for leadership.
+3. Offer `snext report --open` to produce the bulletin for other teams and leadership.
+
+## The team bulletin
+
+The **Bulletin** tab and `snext report` produce the page the team shares with other
+teams and leadership: newsletter masthead (team name, tagline, sprint progress), headline
+numbers, this sprint's goals with owners and Jira progress, last sprint's recap with
+outcomes, team metrics, capacity split, the plan for the coming sprints, deadlines, and
+who's on what. Make it read well:
+
+- After committing a sprint, draft a **focus note** (2-3 sentences: what this sprint is
+  about and why it matters, for readers outside the team) and set it with
+  `snext sprint summary N "..."`. Use **bold** for the headline phrase.
+- At close, the `--summary` becomes the recap story: outcomes and impact, not activity.
+- Goal descriptions show on the cards (first line only): one plain sentence on the
+  outcome for the user or business.
+- Set the team name and tagline once with `snext sprint config --name --tagline`.
 
 ## Setting up from Jira
 

@@ -19,9 +19,11 @@ what the team works on:
 - **Commit and close.** Commit a sprint at planning; additions and drops are tracked.
   Close it with outcomes (met / partly met / missed / dropped) and sNext records say/do
   and unplanned-work metrics.
-- **Leadership report.** A Roadmap view and `snext report`: a self-contained HTML page
-  with metrics, last sprint's results, this sprint's commitments, capacity split
-  against target, and the roadmap of ranked projects across sprints.
+- **The team bulletin.** The page you share with other teams and leadership: part
+  newsletter, part infographic, part plan. It covers headline numbers, this sprint's
+  focus and goals with owners, how the last sprint went, metrics with trends, the
+  capacity split, the plan for the coming sprints, deadlines and who's on what. It's
+  one self-contained HTML file (Bulletin tab or `snext report`).
 - **Team metrics.** Cards with history, trend and month-on-month change.
 - **Markdown storage, CLI for everything, agent skill.** `/snext` in your agent starts
   the app, registers itself and watches for changes you make in the UI. Jira progress
@@ -37,7 +39,7 @@ pnpm build
 cd apps/cli && pnpm link --global && cd -    # or: node apps/cli/dist/index.js ...
 
 snext up --open                               # web app on http://127.0.0.1:4317
-snext sprint config --start 2026-11-02 --weeks 2 --team "Ana,Ben,Cal"
+snext sprint config --name "Payments Team" --start 2026-11-02 --weeks 2 --team "Ana,Ben,Cal"
 
 snext add area "Product" --share 70
 snext add area "Platform" --share 30
@@ -48,7 +50,8 @@ snext rank                                    # ranked goals with reasons
 snext plan                                    # goals on the next sprints
 snext sprint commit                           # at sprint planning
 snext sprint close --met G-1                  # at sprint review
-snext report --open                           # page for leadership
+snext sprint summary 1 "This sprint we're getting **refunds live**..."   # focus note
+snext report --open                           # the bulletin to share
 ```
 
 ### Install the agent skill

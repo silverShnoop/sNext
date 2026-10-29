@@ -72,7 +72,7 @@ test("metrics: add, record, import and summarise", () => {
 test("team, plan, commit, close, roadmap and report", () => {
   run(["done", "G-1", "G-2"]); // goals from earlier tests would otherwise compete for capacity
   const today = new Date().toISOString().slice(0, 10);
-  const cfg = run(["sprint", "config", "--start", today, "--weeks", "1", "--count", "2", "--next-sprints", "1", "--team", "Ana,Ben"]);
+  const cfg = run(["sprint", "config", "--start", today, "--weeks", "1", "--count", "2", "--next-sprints", "1", "--team", "Ana,Ben", "--name", "Payments <Team>"]);
   assert.equal(cfg.currentSprint, 1);
   assert.deepEqual(cfg.team, ["Ana", "Ben"]);
 
@@ -103,6 +103,7 @@ test("team, plan, commit, close, roadmap and report", () => {
   const out = path.join(dir, "report.html");
   run(["report", "-o", out]);
   const html = fs.readFileSync(out, "utf8");
-  assert.match(html, /<title>Team plan/);
-  assert.match(html, /Roadmap/);
+  assert.match(html, /<title>Payments &lt;Team&gt; · Sprint 1 bulletin<\/title>/);
+  assert.match(html, /How it went/);
+  assert.match(html, /What we're focused on/);
 });
