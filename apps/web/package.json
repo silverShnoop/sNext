@@ -1,0 +1,32 @@
+{
+  "name": "@snext/web",
+  "version": "0.1.0",
+  "description": "sNext local web app: HTTP API, live change stream and hierarchical UI",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "dev": "concurrently -k -n api,ui \"tsx watch src/server/dev.ts\" \"vite\""
+  },
+  "dependencies": {
+    "@snext/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.20.6",
+    "vite": "^8.0.0"
+  }
+}
