@@ -7,10 +7,23 @@ import { Command, Option } from "commander";
 import {
   ITEM_TYPES,
   PRIORITIES,
+  METRIC_DIRECTIONS,
   STATUSES,
   SnextError,
   Store,
+  buildTimeline,
+  createMetric,
+  deleteMetric,
+  getMetric,
   importTree,
+  listMetrics,
+  readSettings,
+  recordMetric,
+  removeMetricPoint,
+  sprintNumberFor,
+  summarizeMetric,
+  updateMetric,
+  updateSprintSettings,
   listAgents,
   nextTasks,
   pendingChanges,
@@ -23,11 +36,12 @@ import {
   type ImportNode,
   type ItemType,
   type LogEntry,
+  type MetricDirection,
   type Priority,
   type Status,
   type SyncResult,
 } from "@snext/core";
-import { itemDetail, itemLine, logLine, nextLine, tree } from "./format.js";
+import { itemDetail, itemLine, logLine, metricLine, nextLine, timelineText, tree } from "./format.js";
 import { ensureServer, openBrowser, serveForeground, stopServer } from "./server.js";
 
 interface Globals {
@@ -83,6 +97,29 @@ const typeArg = (v: string): ItemType => {
 const nullable = (v: string | undefined) => (v === undefined ? undefined : v === "none" || v === "" ? null : v);
 const collect = (v: string, prev: string[] = []) => [...prev, v];
 
+function num(v: string | undefined, what: string): number | undefined {
+  if (v === undefined) return undefined;
+  const n = Number(v);
+  if (v.trim() === "" || !Number.isFinite(n)) throw new SnextError(`${what} must be a number, got "${v}"`);
+  return n;
+}
+
+function nullableNum(v: string | undefined, what: string): number | null | undefined {
+  return v === "none" ? null : num(v, what);
+}
+
+/** Resolve a sprint reference: N, current, next, +N, or none/auto (clears the pin). */
+function sprintArg(dir: string, v: string | undefined): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === "none" || v === "auto") return null;
+  const current = sprintNumberFor(readSettings(dir).sprint, new Date().toISOString().slice(0, 10));
+  if (v === "current") return current;
+  if (v === "next") return current + 1;
+  if (/^\+\d+$/.test(v)) return current + Number(v.slice(1));
+  if (/^\d+$/.test(v) && Number(v) >= 1) return Number(v);
+  throw new SnextError(`sprint must be a number, current, next, +N or none, got "${v}"`);
+}
+
 async function readInput(file?: string): Promise<string> {
   if (file && file !== "-") return fs.readFileSync(file, "utf8");
   const chunks: Buffer[] = [];
@@ -102,6 +139,8 @@ program
   .addOption(new Option("-s, --status <status>").choices(STATUSES))
   .addOption(new Option("--priority <priority>").choices(PRIORITIES))
   .option("--due <date>", "YYYY-MM-DD")
+  .option("-e, --estimate <points>", "size in points (tasks)")
+  .option("--sprint <sprint>", "pin to a sprint: N, current, next or +N (tasks)")
   .option("-l, --link <url>", "external link, repeatable (Jira/GitHub/Linear keys auto-detected)", collect)
   .action(
     action((type: string, title: string, o: Record<string, any>, cmd: Command) => {
@@ -115,6 +154,8 @@ program
           status: o.status,
           priority: o.priority,
           due: o.due,
+          estimate: num(o.estimate, "estimate"),
+          sprint: sprintArg(c.dir, o.sprint) ?? undefined,
           links: (o.link ?? []).map((url: string) => ({ url })),
         },
         c.actor,
@@ -191,6 +232,8 @@ program
   .addOption(new Option("-s, --status <status>").choices(STATUSES))
   .option("--priority <priority>", `${PRIORITIES.join(" | ")} | none`)
   .option("--due <date>", "YYYY-MM-DD | none")
+  .option("-e, --estimate <points>", "size in points | none")
+  .option("--sprint <sprint>", "pin to sprint N, current, next, +N | none (auto-schedule)")
   .action(
     action((id: string, o: Record<string, any>, cmd: Command) => {
       const c = ctx(cmd);
@@ -202,6 +245,8 @@ program
           status: o.status,
           priority: nullable(o.priority) as Priority | null | undefined,
           due: nullable(o.due),
+          estimate: nullableNum(o.estimate, "estimate"),
+          sprint: sprintArg(c.dir, o.sprint),
         },
         c.actor,
       );
@@ -322,6 +367,206 @@ program
         next.map((n) => ({ ...n, project: n.project?.id, area: n.area?.id })),
         () => next.map(nextLine).join("\n") || "nothing actionable",
       );
+    }),
+  );
+
+program
+  .command("timeline")
+  .description("prioritised tasks laid out on upcoming sprints, then Next and Future")
+  .action(
+    action((_o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const t = buildTimeline(c.store().list(), readSettings(c.dir).sprint);
+      print(
+        c.json,
+        {
+          ...t,
+          buckets: t.buckets.map((b) => ({ ...b, tasks: b.tasks.map((x) => ({ ...x, project: x.project?.id, area: x.area?.id })) })),
+        },
+        () => timelineText(t),
+      );
+    }),
+  );
+
+const sprintCmd = program.command("sprint").description("sprint settings for the timeline");
+
+sprintCmd
+  .command("config")
+  .description("show or change sprint settings (no options shows them)")
+  .option("--start <date>", "first day of sprint 1, YYYY-MM-DD")
+  .option("--weeks <n>", "weeks per sprint")
+  .option("--count <n>", "number of sprints shown individually")
+  .option("--capacity <points>", "points per sprint")
+  .option("--default-estimate <points>", "points for tasks without an estimate")
+  .option("--next-sprints <n>", "how many sprints of capacity the Next bucket holds")
+  .action(
+    action((o: Record<string, string | undefined>, cmd: Command) => {
+      const c = ctx(cmd);
+      const settings = updateSprintSettings(
+        c.dir,
+        {
+          start: o.start,
+          weeks: num(o.weeks, "weeks"),
+          count: num(o.count, "count"),
+          capacity: num(o.capacity, "capacity"),
+          defaultEstimate: num(o.defaultEstimate, "default estimate"),
+          nextSprints: num(o.nextSprints, "next sprints"),
+        },
+        c.actor,
+      );
+      const s = settings.sprint;
+      const current = sprintNumberFor(s, new Date().toISOString().slice(0, 10));
+      print(c.json, { ...settings, currentSprint: current }, () =>
+        [
+          `sprint 1 starts ${s.start}, ${s.weeks} week(s) each; current sprint: ${current}`,
+          `showing ${s.count} sprints, then Next (${s.nextSprints} sprints of capacity), then Future`,
+          `capacity ${s.capacity} pts/sprint, default estimate ${s.defaultEstimate} pt`,
+        ].join("\n"),
+      );
+    }),
+  );
+
+// ---- metrics ---------------------------------------------------------------
+
+const metric = program.command("metric").alias("metrics").description("team metrics shown as cards at the top of the UI");
+
+const withSummary = (m: ReturnType<typeof getMetric>) => ({ ...m, summary: summarizeMetric(m) });
+
+metric
+  .command("list")
+  .alias("ls")
+  .description("list metrics with latest value, month-on-month change and trend")
+  .action(
+    action((_o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const metrics = listMetrics(c.dir).map(withSummary);
+      print(c.json, metrics, () => metrics.map(metricLine).join("\n") || "(no metrics)");
+    }),
+  );
+
+metric
+  .command("show")
+  .argument("<id>")
+  .description("one metric with its full history")
+  .action(
+    action((id: string, _o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = withSummary(getMetric(c.dir, id));
+      print(c.json, m, () =>
+        [metricLine(m), ...(m.description ? ["", m.description] : []), "", ...m.history.map((p) => `  ${p.date}  ${p.value}${p.note ? `  ${p.note}` : ""}`)].join("\n"),
+      );
+    }),
+  );
+
+metric
+  .command("add")
+  .argument("<name>")
+  .description("create a metric")
+  .option("--id <id>", "slug (default: from the name)")
+  .option("-u, --unit <unit>", "e.g. %, days, deploys")
+  .addOption(new Option("--direction <dir>", "which way is good").choices(METRIC_DIRECTIONS).default("up"))
+  .option("--target <n>")
+  .option("-d, --description <text>")
+  .action(
+    action((name: string, o: Record<string, string | undefined>, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = createMetric(
+        c.dir,
+        { name, unit: o.unit, direction: o.direction as MetricDirection, target: num(o.target, "target"), description: o.description },
+        c.actor,
+        o.id,
+      );
+      print(c.json, m, () => `created metric ${m.id}`);
+    }),
+  );
+
+metric
+  .command("update")
+  .argument("<id>")
+  .description("change a metric's definition (use 'none' to clear unit or target)")
+  .option("--name <name>")
+  .option("-u, --unit <unit>")
+  .addOption(new Option("--direction <dir>").choices(METRIC_DIRECTIONS))
+  .option("--target <n>")
+  .option("-d, --description <text>")
+  .action(
+    action((id: string, o: Record<string, string | undefined>, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = updateMetric(
+        c.dir,
+        id,
+        {
+          name: o.name,
+          unit: o.unit === "none" ? null : o.unit,
+          direction: o.direction as MetricDirection | undefined,
+          target: nullableNum(o.target, "target"),
+          description: o.description,
+        },
+        c.actor,
+      );
+      print(c.json, withSummary(m), () => `updated ${metricLine(withSummary(m))}`);
+    }),
+  );
+
+metric
+  .command("record")
+  .alias("set")
+  .argument("<id>")
+  .argument("<value>")
+  .description("record a value (default date today; same date replaces)")
+  .option("--date <date>", "YYYY-MM-DD")
+  .option("--note <text>")
+  .action(
+    action((id: string, value: string, o: { date?: string; note?: string }, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = withSummary(recordMetric(c.dir, id, { value: num(value, "value")!, date: o.date, note: o.note }, c.actor));
+      print(c.json, m, () => metricLine(m));
+    }),
+  );
+
+metric
+  .command("import")
+  .argument("<id>")
+  .argument("[file]", "JSON file, or - / omitted for stdin")
+  .description('backfill history from JSON: [{"date":"2026-09-30","value":12,"note":"..."}]')
+  .action(
+    action(async (id: string, file: string | undefined, _o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const points = JSON.parse(await readInput(file)) as { date: string; value: number; note?: string }[];
+      let m = getMetric(c.dir, id);
+      for (const p of points) {
+        const same = m.history.find((h) => h.date === p.date);
+        if (same && same.value === Number(p.value) && (same.note ?? "") === (p.note ?? "")) continue;
+        m = recordMetric(c.dir, id, { value: Number(p.value), date: p.date, note: p.note }, c.actor);
+      }
+      const s = withSummary(m);
+      print(c.json, s, () => metricLine(s));
+    }),
+  );
+
+metric
+  .command("unrecord")
+  .argument("<id>")
+  .argument("<date>")
+  .description("remove the value recorded on a date")
+  .action(
+    action((id: string, date: string, _o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = withSummary(removeMetricPoint(c.dir, id, date, c.actor));
+      print(c.json, m, () => metricLine(m));
+    }),
+  );
+
+metric
+  .command("delete")
+  .alias("rm")
+  .argument("<id>")
+  .description("delete a metric and its history")
+  .action(
+    action((id: string, _o: unknown, cmd: Command) => {
+      const c = ctx(cmd);
+      const m = deleteMetric(c.dir, id, c.actor);
+      print(c.json, { deleted: m.id }, () => `deleted metric ${m.id}`);
     }),
   );
 

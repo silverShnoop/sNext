@@ -27,6 +27,10 @@ from three goals:
 | Due dates | Optional `due` (YYYY-MM-DD). Overdue or due within 2 days bumps effective priority up one level. |
 | Next list | `snext next` and the **Next** tab: tasks that are not done or blocked, under projects/areas that are not done, sorted by: in-progress first, effective priority, due date, then area/project/task rank. Each row lists its reasons. |
 
+| Estimates | Optional `estimate` (points) on tasks; board-wide `defaultEstimate` for the rest. |
+| Sprint timeline | **Timeline** tab and `snext timeline`: the ordered list packed into the current + next sprints by capacity, then Next and Future buckets. Sprint length, count, capacity and start date are configurable (`snext sprint config` or the UI). |
+| Sprint pins | `sprint: N` on a task overrides automatic placement (drag a task onto a column in the UI, or `--sprint next`). |
+
 Design choice: the ordering is a **sort with explicit tie-breakers**, not a weighted
 score. It is easy to predict and explain ("high priority, inherited from Payments; due
 tomorrow"). A scoring model can be added later (P2) without changing the data.
@@ -84,3 +88,19 @@ tomorrow"). A scoring model can be added later (P2) without changing the data.
 9. **Blocked work:** besides explicit dependencies, should "waiting on someone" be a
    distinct state with a follow-up date?
 10. **Projects in Next:** should projects with no tasks appear as "needs breaking down"?
+
+### Timeline
+
+11. **Packing:** sprints fill strictly in priority order, so a sprint can close with
+    spare points rather than let a lower-priority small task jump ahead. Would you rather
+    backfill spare capacity with the next task that fits?
+12. **Capacity:** one number per sprint for now. Do you need per-sprint overrides
+    (holidays, on-call), or capacity per person / per area?
+13. **Pins:** pins are absolute sprint numbers, so changing the sprint start or length
+    shifts them. Should pins instead store the sprint's start date?
+14. **Next vs Future:** Next is "the following N sprints of capacity". Would you rather
+    have it as a fixed date horizon (e.g. next quarter)?
+15. **Done work:** the timeline shows open work only. Should the current sprint also
+    show what was completed in it (needs a completion date on tasks)?
+16. **Jira sprints:** should sNext read the actual Jira sprint assignment as the pin (via
+    the agent sync) when an issue is in a sprint?

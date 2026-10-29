@@ -1,4 +1,4 @@
-import type { Item, LogEntry, NextTask, Store } from "@snext/core";
+import type { Item, LogEntry, Metric, MetricSummary, NextTask, Store, Timeline } from "@snext/core";
 
 const STATUS_MARK: Record<Item["status"], string> = {
   todo: "[ ]",
@@ -11,6 +11,8 @@ export function itemLine(item: Item): string {
   const bits = [`${STATUS_MARK[item.status]} ${item.id}  ${item.title}`];
   if (item.priority) bits.push(`!${item.priority}`);
   if (item.due) bits.push(`due:${item.due}`);
+  if (item.estimate != null) bits.push(`${item.estimate}pt`);
+  if (item.sprint != null) bits.push(`sprint:${item.sprint}`);
   for (const l of item.links) bits.push(l.key ? `<${l.key}${l.externalStatus ? `: ${l.externalStatus}` : ""}>` : `<${l.url}>`);
   return bits.join("  ");
 }
@@ -23,6 +25,8 @@ export function itemDetail(item: Item): string {
     `  status:   ${item.status}`,
     item.priority ? `  priority: ${item.priority}` : "",
     item.due ? `  due:      ${item.due}` : "",
+    item.estimate != null ? `  estimate: ${item.estimate} pt` : "",
+    item.sprint != null ? `  sprint:   ${item.sprint} (pinned)` : "",
     ...item.links.map(
       (l) => `  link:     ${l.url}${l.key ? ` (${l.system ?? "?"} ${l.key}${l.externalStatus ? `: ${l.externalStatus}` : ""})` : ""}`,
     ),
@@ -71,4 +75,33 @@ function short(v: unknown): string {
   if (v == null || v === "") return "none";
   const s = String(v).replace(/\s+/g, " ");
   return s.length > 60 ? `${s.slice(0, 60)}...` : s;
+}
+
+export function metricLine(m: Metric & { summary: MetricSummary }): string {
+  const s = m.summary;
+  const unit = m.unit ? (m.unit === "%" ? "%" : ` ${m.unit}`) : "";
+  const bits = [`${m.id}  ${m.name}:`, s.latest ? `${s.latest.value}${unit} (${s.latest.date})` : "no data"];
+  if (s.mom) {
+    const pct = s.mom.pct == null ? "" : ` / ${(s.mom.pct * 100).toFixed(1)}%`;
+    const tone = s.mom.good == null ? "" : s.mom.good ? " good" : " bad";
+    bits.push(`MoM ${s.mom.delta >= 0 ? "+" : ""}${Number(s.mom.delta.toFixed(4))}${pct}${tone}`);
+  }
+  if (s.trend) bits.push(`trend ${s.trend}`);
+  if (m.target != null) bits.push(`target ${m.direction === "down" ? "<=" : ">="} ${m.target}${s.targetMet ? " (met)" : ""}`);
+  return bits.join("  ");
+}
+
+export function timelineText(t: Timeline): string {
+  const out: string[] = [];
+  for (const b of t.buckets) {
+    const dates = b.start && b.end ? ` ${b.start}..${b.end}` : b.start ? ` from ${b.start}` : "";
+    const cap = b.capacity != null ? `  ${b.used}/${b.capacity} pts${b.used > b.capacity ? " OVER" : ""}` : `  ${b.used} pts`;
+    out.push(`${b.label}${dates}${cap}`);
+    for (const x of b.tasks) {
+      out.push(`    ${x.item.id}  ${x.item.title}  [${x.effectivePriority}, ${x.points}pt${x.pinned ? ", pinned" : ""}]${x.risk ? `  ! ${x.risk}` : ""}`);
+    }
+    if (!b.tasks.length) out.push("    (empty)");
+  }
+  if (t.blocked) out.push(`${t.blocked} blocked task(s) not scheduled`);
+  return out.join("\n");
 }

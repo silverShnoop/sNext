@@ -4,9 +4,23 @@ import type { Ctx } from "./App";
 
 export type EditorTarget = { item: Item; create?: undefined } | { item?: undefined; create: { type: ItemType; parent?: string } };
 
+function sprintOptions(timeline: Ctx["timeline"], pinned?: number) {
+  if (!timeline) return pinned ? [{ value: String(pinned), label: `Sprint ${pinned}` }] : [];
+  const first = timeline.currentSprint.number;
+  const last = first + timeline.settings.count + timeline.settings.nextSprints - 1;
+  const out: { value: string; label: string }[] = [];
+  if (pinned != null && pinned < first) out.push({ value: String(pinned), label: `Sprint ${pinned} (past)` });
+  for (let n = first; n <= last + 1; n++) {
+    const tag = n === first ? " (current)" : n > first + timeline.settings.count - 1 ? (n > last ? " (future)" : " (next)") : "";
+    out.push({ value: String(n), label: `Sprint ${n}${tag}` });
+  }
+  if (pinned != null && pinned > last + 1) out.push({ value: String(pinned), label: `Sprint ${pinned} (future)` });
+  return out;
+}
+
 const PARENT_TYPE: Record<ItemType, ItemType | null> = { area: null, project: "area", task: "project" };
 
-export function Editor({ target, items, byId, run, onClose }: Ctx & { target: EditorTarget; onClose: () => void }) {
+export function Editor({ target, items, byId, run, timeline, onClose }: Ctx & { target: EditorTarget; onClose: () => void }) {
   const existing = target.item ? byId.get(target.item.id) ?? target.item : undefined;
   const type = existing?.type ?? target.create!.type;
   const [title, setTitle] = useState(existing?.title ?? "");
@@ -15,6 +29,8 @@ export function Editor({ target, items, byId, run, onClose }: Ctx & { target: Ed
   const [priority, setPriority] = useState<Priority | "">(existing?.priority ?? "");
   const [due, setDue] = useState(existing?.due ?? "");
   const [parent, setParent] = useState(existing?.parent ?? target.create?.parent ?? "");
+  const [estimate, setEstimate] = useState(existing?.estimate?.toString() ?? "");
+  const [sprint, setSprint] = useState(existing?.sprint?.toString() ?? "");
   const [newLink, setNewLink] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -38,11 +54,20 @@ export function Editor({ target, items, byId, run, onClose }: Ctx & { target: Ed
           status,
           priority: priority || undefined,
           due: due || undefined,
+          estimate: estimate === "" ? undefined : Number(estimate),
+          sprint: sprint === "" ? undefined : Number(sprint),
           parent: parent || undefined,
           links: newLink.trim() ? [{ url: newLink.trim() }] : [],
         });
       } else {
-        await api.update(existing.id, { title, description, status, priority: priority || null, due: due || null });
+        await api.update(existing.id, {
+          title,
+          description,
+          status,
+          priority: priority || null,
+          due: due || null,
+          ...(type === "task" ? { estimate: estimate === "" ? null : Number(estimate), sprint: sprint === "" ? null : Number(sprint) } : {}),
+        });
         if (parent && parent !== existing.parent) await api.move(existing.id, { parent });
         if (newLink.trim()) await api.addLink(existing.id, { url: newLink.trim() });
       }
@@ -95,6 +120,23 @@ export function Editor({ target, items, byId, run, onClose }: Ctx & { target: Ed
             Due
             <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
+          {type === "task" && (
+            <label>
+              Estimate (pts)
+              <input type="number" min={0} step={0.5} placeholder={`default ${timeline?.settings.defaultEstimate ?? 1}`} value={estimate} onChange={(e) => setEstimate(e.target.value)} />
+            </label>
+          )}
+          {type === "task" && (
+            <label>
+              Sprint
+              <select value={sprint} onChange={(e) => setSprint(e.target.value)}>
+                <option value="">auto (by priority)</option>
+                {sprintOptions(timeline, existing?.sprint).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {parentType && (
             <label>
               {parentType === "area" ? "Area" : "Project"}

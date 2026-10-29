@@ -53,3 +53,34 @@ test("watch wakes on another actor's change and ignores the agent's own", async 
   const lines = out.trim().split("\n").map((l) => JSON.parse(l));
   assert.deepEqual(lines.map((l) => [l.actor, l.title]), [["ui", "Theirs"]]);
 });
+
+test("metrics: add, record, import and summarise", () => {
+  const m = run(["metric", "add", "Cycle time", "-u", "days", "--direction", "down", "--target", "3"]);
+  assert.equal(m.id, "cycle-time");
+  run(["metric", "import", m.id], JSON.stringify([{ date: "2026-08-31", value: 6 }, { date: "2026-09-30", value: 5 }]));
+  const s = run(["metric", "record", m.id, "4", "--date", "2026-10-28"]);
+  assert.deepEqual(s.summary.mom, { delta: -1, pct: -0.2, good: true });
+  assert.equal(s.summary.trend, "down");
+  assert.equal(run(["metric", "list"])[0].summary.latest.value, 4);
+  run(["metric", "unrecord", m.id, "2026-10-28"]);
+  assert.equal(run(["metric", "show", m.id]).history.length, 2);
+});
+
+test("sprint config, estimates, pins and timeline", () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const cfg = run(["sprint", "config", "--start", today, "--weeks", "1", "--capacity", "3", "--count", "2", "--next-sprints", "1"]);
+  assert.equal(cfg.currentSprint, 1);
+  const area = run(["add", "area", "Plan"]);
+  const project = run(["add", "project", "Roadmap", "-p", area.id]);
+  const a = run(["add", "task", "A", "-p", project.id, "--priority", "critical", "-e", "3"]);
+  const b = run(["add", "task", "B", "-p", project.id, "--priority", "critical", "-e", "2", "--sprint", "next"]);
+  assert.equal(b.sprint, 2);
+  run(["update", b.id, "--sprint", "none", "--estimate", "none"]);
+  assert.equal(run(["show", b.id]).sprint, undefined);
+
+  const t = run(["timeline"]);
+  const where = (id) => t.buckets.find((x) => x.tasks.some((k) => k.item.id === id));
+  assert.deepEqual(t.buckets.map((x) => x.kind), ["sprint", "sprint", "next", "future"]);
+  assert.equal(where(a.id).number, 1);
+  assert.equal(where(b.id).number, 2, "1pt default estimate does not fit beside A's 3pt");
+});

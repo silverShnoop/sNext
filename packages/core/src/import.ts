@@ -22,6 +22,7 @@ export interface ImportNode {
   status?: Status;
   priority?: Priority;
   due?: string;
+  estimate?: number;
   links?: (string | ItemLink)[];
   children?: ImportNode[];
 }
@@ -65,7 +66,7 @@ function upsert(
   let item = match(store, type, parent, node.title, links);
   if (!item) {
     item = store.create(
-      { type, title: node.title, description: node.description, parent, status: node.status, priority: node.priority, due: node.due, links },
+      { type, title: node.title, description: node.description, parent, status: node.status, priority: node.priority, due: node.due, estimate: node.estimate, links },
       actor,
     );
     report.created.push(item.id);
@@ -73,7 +74,7 @@ function upsert(
     const before = item.updated;
     item = store.update(
       item.id,
-      { title: node.title, description: node.description, status: node.status, priority: node.priority, due: node.due },
+      { title: node.title, description: node.description, status: node.status, priority: node.priority, due: node.due, estimate: node.estimate },
       actor,
     );
     for (const link of links) {

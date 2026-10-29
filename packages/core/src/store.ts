@@ -123,6 +123,8 @@ export class Store {
       priority: input.priority,
       rank: (siblings.at(-1)?.rank ?? 0) + RANK_STEP,
       due: input.due,
+      estimate: input.estimate,
+      sprint: input.sprint,
       links: (input.links ?? []).map(normalizeLink),
       created: now,
       updated: now,
@@ -147,8 +149,10 @@ export class Store {
     if (patch.status !== undefined) next.status = patch.status;
     if (patch.priority !== undefined) next.priority = patch.priority ?? undefined;
     if (patch.due !== undefined) next.due = patch.due ?? undefined;
+    if (patch.estimate !== undefined) next.estimate = patch.estimate ?? undefined;
+    if (patch.sprint !== undefined) next.sprint = patch.sprint ?? undefined;
 
-    for (const k of ["title", "description", "status", "priority", "due"] as const) {
+    for (const k of ["title", "description", "status", "priority", "due", "estimate", "sprint"] as const) {
       if (item[k] !== next[k]) changes[k] = { from: item[k] ?? null, to: next[k] ?? null };
     }
     if (!Object.keys(changes).length) return item;
@@ -304,7 +308,19 @@ export function sortItems(items: Item[]): Item[] {
   return [...items].sort((a, b) => a.rank - b.rank || a.created.localeCompare(b.created));
 }
 
-function validateFields(input: { status?: unknown; priority?: unknown; due?: unknown }): void {
+function validateFields(input: {
+  status?: unknown;
+  priority?: unknown;
+  due?: unknown;
+  estimate?: unknown;
+  sprint?: unknown;
+}): void {
+  if (input.estimate != null && !(typeof input.estimate === "number" && input.estimate >= 0)) {
+    throw new SnextError(`invalid estimate "${input.estimate}" (a number of points >= 0)`);
+  }
+  if (input.sprint != null && !(Number.isInteger(input.sprint) && (input.sprint as number) >= 1)) {
+    throw new SnextError(`invalid sprint "${input.sprint}" (a sprint number >= 1)`);
+  }
   if (input.status !== undefined && !STATUSES.includes(input.status as never)) {
     throw new SnextError(`invalid status "${input.status}" (${STATUSES.join(", ")})`);
   }

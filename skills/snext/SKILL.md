@@ -1,6 +1,6 @@
 ---
 name: snext
-description: Manage the user's sNext task board (Areas > Projects > Tasks, stored as local markdown) through the `snext` CLI. Use when the user types /snext, asks what to work on next, wants to add/update/reprioritise areas, projects or tasks, wants sNext populated from Jira (or another tracker), or wants sNext statuses synced with Jira. Also use to react to changes the user makes in the sNext web UI.
+description: Manage the user's sNext task board (Areas > Projects > Tasks, stored as local markdown) through the `snext` CLI. Use when the user types /snext, asks what to work on next or what fits in upcoming sprints, wants to add/update/reprioritise areas, projects or tasks, record or review team metrics, plan sprints, wants sNext populated from Jira (or another tracker), or wants sNext statuses synced with Jira. Also use to react to changes the user makes in the sNext web UI.
 ---
 
 # sNext
@@ -46,8 +46,9 @@ with whichever your harness supports, preferring the first:
 - **Neither**: call `snext changes --agent claude --json` at the start of each turn.
 
 Each change is a JSON object: `{ts, actor, op, id, type, title, changes}` where `op` is
-`create | update | delete | move | link | unlink | sync` and `changes` maps field names to
-`{from, to}`.
+`create | update | delete | move | link | unlink | sync | record` and `changes` maps field
+names to `{from, to}`. `type` is `area | project | task`, or `metric` (a metric was defined
+or a value recorded; `changes` is keyed by date) or `settings` (sprint settings changed).
 
 How to react, briefly and without nagging:
 
@@ -69,8 +70,9 @@ snext next [-n 10] [--within A-1|P-1] --json     # suggested order of what to do
 
 snext add area "Title" [-d "desc"] [--priority high]
 snext add project "Title" -p A-1 [-d ...] [--due 2026-12-01] [-l URL]
-snext add task "Title" -p P-1 [-d ...] [-s in_progress] [--priority critical] [-l URL ...]
+snext add task "Title" -p P-1 [-d ...] [-s in_progress] [--priority critical] [-e 3] [-l URL ...]
 snext update ID [--title ..] [-d ..] [-s STATUS] [--priority P|none] [--due DATE|none]
+                [-e POINTS|none] [--sprint N|current|next|+N|none]
 snext done|start|block|reopen ID [ID ...]        # status shortcuts
 snext move ID [-p NEW_PARENT] [--before SIB | --after SIB]
 snext link ID URL [--system jira --key ABC-1]    # Jira/GitHub/Linear keys auto-detected from URL
@@ -78,11 +80,23 @@ snext unlink ID URL_OR_KEY
 snext delete ID [-r]                             # -r deletes descendants too
 snext import [FILE|-] [-p PARENT]                # bulk idempotent upsert, see below
 snext log [-n 20]                                # recent changes by anyone
+
+snext timeline --json                            # tasks laid out on sprints, then Next, Future
+snext sprint config [--start DATE] [--weeks N] [--count N] [--capacity PTS]
+                    [--default-estimate PTS] [--next-sprints N]   # no options: show
+
+snext metric list|show ID --json                 # values, month-on-month change, trend
+snext metric add "Name" [-u %] [--direction up|down|neutral] [--target N] [-d ..] [--id slug]
+snext metric record ID VALUE [--date DATE] [--note ..]   # same date replaces
+snext metric import ID [FILE|-]                  # backfill [{"date","value","note"}]
+snext metric update ID [--name ..] [-u ..|none] [--direction ..] [--target N|none]
+snext metric unrecord ID DATE | snext metric delete ID
 snext sync plan|apply ...                        # external status sync, see below
 ```
 
 Statuses: `todo`, `in_progress`, `blocked`, `done`. Priorities: `critical`, `high`,
-`medium`, `low` (unset = inherit from parent). Hierarchy is strict: a project's parent is
+`medium`, `low` (unset = inherit from parent). Estimates are points (tasks only; unset
+uses the board's default estimate). Hierarchy is strict: a project's parent is
 an area, a task's parent is a project.
 
 Confirm with the user before deleting anything with descendants, or before changing more
@@ -160,3 +174,37 @@ priority (own, else inherited from project, else area, else medium; overdue or d
 task rank). When the user asks "what should I do next?", show the top 3-5 with reasons.
 When they reprioritise ("X matters more than Y"), use `update --priority` for a class
 change or `move --before/--after` for order among siblings.
+
+## Sprint timeline
+
+`snext timeline --json` lays the prioritised list onto the current sprint and the next
+few (`count`, default 3), then a **Next** bucket (`nextSprints` sprints of capacity), then
+**Future**. Each sprint has `capacity` points; tasks fill in strict priority order (a task
+that does not fit closes that sprint, so lower-priority work never jumps ahead). Pinned
+tasks (`--sprint`) go to their sprint first; pins in the past carry over into the current
+sprint. Each task may carry `risk` when it lands after its due date.
+
+- "What's in this sprint / next sprint?" -> read `timeline` and summarise per sprint.
+- "Move X to next sprint" -> `update X --sprint next` (or `+2`, or a number).
+  `--sprint none` returns it to automatic scheduling.
+- "Sprints are 3 weeks starting Monday" -> `sprint config --start YYYY-MM-DD --weeks 3`.
+  Sprint numbers count from `start`, so changing `start` or `weeks` renumbers sprints and
+  shifts existing pins; warn the user and re-check pins after such a change.
+- Populate estimates from Jira story points when importing (`estimate` in the import tree).
+- Flag overloaded sprints (`used > capacity`) and `risk` items proactively when asked
+  about planning.
+
+## Team metrics
+
+Metrics are shown as cards at the top of the UI with history, trend and month-on-month
+change. Each has a `direction` saying which way is good (`down` for things like incidents,
+lead time, failure rate).
+
+- Recording: `metric record ID VALUE` (today) or `--date` to backfill. One value per
+  date; recording the same date again replaces it. Use `metric import` for many points.
+- Month-on-month compares the latest value with the last value recorded in the previous
+  calendar month; if there is none, there is no MoM. Record at least one value per month
+  (e.g. month-end) for meaningful MoM.
+- If the user asks you to keep a metric updated from a tool you can reach (e.g. "open
+  bugs" from a Jira count query), fetch just the count and `record` it; do not invent
+  values.

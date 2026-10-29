@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, onChange, type Agent, type Item, type ItemType, type LogEntry } from "./api";
+import { api, onChange, type Agent, type Item, type ItemType, type LogEntry, type Metric, type Timeline } from "./api";
 import { ActivityView } from "./ActivityView";
 import { Editor, type EditorTarget } from "./Editor";
 import { HierarchyView } from "./HierarchyView";
+import { MetricsStrip } from "./MetricsStrip";
 import { NextView } from "./NextView";
+import { TimelineView } from "./TimelineView";
 
-type View = "hierarchy" | "next" | "activity";
+type View = "hierarchy" | "next" | "timeline" | "activity";
+
+const VIEW_LABEL: Record<View, string> = { hierarchy: "Hierarchy", next: "Next", timeline: "Timeline", activity: "Activity" };
 
 function stored<T>(key: string, fallback: T): T {
   try {
@@ -27,6 +31,8 @@ function persist(key: string, value: unknown) {
 export function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [view, setView] = useState<View>(() => stored("snext.view", "hierarchy"));
   const [editing, setEditing] = useState<EditorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,9 +41,11 @@ export function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [i, a] = await Promise.all([api.items(), api.agents()]);
+      const [i, a, m, t] = await Promise.all([api.items(), api.agents(), api.metrics(), api.timeline()]);
       setItems(i);
       setAgents(a);
+      setMetrics(m);
+      setTimeline(t);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -78,6 +86,7 @@ export function App() {
     items,
     byId,
     flash,
+    timeline,
     edit: (item: Item) => setEditing({ item }),
     create: (type: ItemType, parent?: string) => setEditing({ create: { type, parent } }),
     run,
@@ -91,9 +100,9 @@ export function App() {
           <span>sNext</span>
         </div>
         <nav className="tabs" role="tablist">
-          {(["hierarchy", "next", "activity"] as View[]).map((v) => (
+          {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} className={view === v ? "active" : ""} onClick={() => setView(v)}>
-              {v === "hierarchy" ? "Hierarchy" : v === "next" ? "Next" : "Activity"}
+              {VIEW_LABEL[v]}
             </button>
           ))}
         </nav>
@@ -114,8 +123,10 @@ export function App() {
       )}
 
       <main>
+        <MetricsStrip metrics={metrics} flash={flash} />
         {view === "hierarchy" && <HierarchyView {...ctx} />}
         {view === "next" && <NextView {...ctx} changeTick={changeTick} />}
+        {view === "timeline" && <TimelineView {...ctx} />}
         {view === "activity" && <ActivityView changeTick={changeTick} byId={byId} edit={ctx.edit} />}
       </main>
 
@@ -139,6 +150,7 @@ export type Ctx = {
   items: Item[];
   byId: Map<string, Item>;
   flash: Set<string>;
+  timeline: Timeline | null;
   edit: (item: Item) => void;
   create: (type: ItemType, parent?: string) => void;
   run: (fn: () => Promise<unknown>) => Promise<void>;

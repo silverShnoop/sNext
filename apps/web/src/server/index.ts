@@ -5,13 +5,18 @@ import { fileURLToPath } from "node:url";
 import {
   SnextError,
   Store,
+  buildTimeline,
   importTree,
+  listMetrics,
   listAgents,
   logSize,
   nextTasks,
   paths,
   readLog,
+  readSettings,
+  summarizeMetric,
   tailLog,
+  updateSprintSettings,
   type ImportNode,
 } from "@snext/core";
 
@@ -88,6 +93,17 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
           reasons: n.reasons,
         })),
       );
+    }
+    if (resource === "metrics" && method === "GET") {
+      return json(res, listMetrics(opts.dir).map((m) => ({ ...m, summary: summarizeMetric(m) })));
+    }
+    if (resource === "timeline" && method === "GET") {
+      return json(res, buildTimeline(store.list(), readSettings(opts.dir).sprint));
+    }
+    if (resource === "settings" && method === "GET") return json(res, readSettings(opts.dir));
+    if (resource === "settings" && method === "PATCH") {
+      const body = (await readBody(req)) as { sprint?: Record<string, unknown> };
+      return json(res, updateSprintSettings(opts.dir, body.sprint ?? {}, UI_ACTOR));
     }
     if (resource === "import" && method === "POST") {
       const body = (await readBody(req)) as { parent?: string; items: ImportNode[] };

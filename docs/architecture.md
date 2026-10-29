@@ -25,6 +25,8 @@ items/
   areas/A-1.md
   projects/P-1.md
   tasks/T-1.md
+metrics/deploy-frequency.md   one file per metric, history in frontmatter
+settings.md          sprint settings (start, weeks, count, capacity, ...)
 changes.log          append-only JSON lines, one per change
 agents/claude.json   registered agents and their log cursor
 state/server.json    running server (pid, port, url)
@@ -58,6 +60,52 @@ Markdown description goes here.
 
 IDs are allocated with an exclusive file create, so concurrent writers (UI and CLI)
 never collide. Updates are written to a temp file and renamed into place.
+
+A metric file:
+
+```markdown
+---
+id: change-failure-rate
+name: Change failure rate
+unit: "%"
+direction: down        # which way is good: up | down | neutral
+target: 15
+rank: 2000
+history:
+  - date: 2026-09-30
+    value: 17
+  - date: 2026-10-28
+    value: 18
+    note: two hotfixes
+created: ...
+updated: ...
+---
+
+Optional markdown description.
+```
+
+Derived values are computed, not stored: latest value; month-on-month change (latest vs
+the last value in the previous calendar month, with good/bad from `direction`); trend
+(sign of a least-squares fit over the last six values, flat when the fitted change is
+under 3% of the mean); whether the target is met.
+
+## Sprint timeline
+
+`settings.md` defines sprint 1's start date and sprint length; sprint N follows from
+those. The timeline takes the ordered list from `nextTasks` (see
+[prioritisation.md](prioritisation.md)) and assigns it:
+
+1. Buckets: the sprint containing today plus the next `count - 1` sprints, then **Next**
+   (capacity of `nextSprints` sprints), then **Future** (unbounded).
+2. Tasks pinned with `sprint: N` are placed first (pins in the past carry over to the
+   current sprint).
+3. Remaining tasks fill buckets strictly in priority order using `estimate` (or
+   `defaultEstimate`) against `capacity`. When a task does not fit, that bucket closes:
+   later tasks never jump ahead of it. A task larger than a sprint takes an empty sprint
+   by itself.
+4. A task whose due date is before its bucket starts is flagged with `risk`.
+
+Blocked tasks are not scheduled; the count is reported.
 
 ## Change log and agent notifications
 
@@ -108,6 +156,9 @@ Cost is one Jira search per 100 linked open items, requesting only the status fi
 | POST/DELETE | `/api/items/:id/links` | add `{url,...}` / remove `?ref=` |
 | POST | `/api/import` | `{parent?, items: ImportNode[]}` |
 | GET | `/api/next` | prioritised task list |
+| GET | `/api/timeline` | prioritised tasks laid out on sprints, Next, Future |
+| GET/PATCH | `/api/settings` | sprint settings (`{sprint: {...}}`) |
+| GET | `/api/metrics` | metrics with history and computed summary |
 | GET | `/api/log`, `/api/agents` | recent changes, registered agents |
 | GET | `/api/events` | SSE stream of change entries |
 

@@ -46,6 +46,10 @@ export interface Item {
   rank: number;
   /** ISO date (YYYY-MM-DD). */
   due?: string;
+  /** Size in points, used for sprint capacity (tasks only). */
+  estimate?: number;
+  /** Pin a task to an absolute sprint number instead of auto-scheduling it. */
+  sprint?: number;
   links: ItemLink[];
   created: string;
   updated: string;
@@ -59,6 +63,8 @@ export interface CreateItemInput {
   status?: Status;
   priority?: Priority;
   due?: string;
+  estimate?: number;
+  sprint?: number;
   links?: ItemLink[];
 }
 
@@ -69,6 +75,8 @@ export interface UpdateItemInput {
   status?: Status;
   priority?: Priority | null;
   due?: string | null;
+  estimate?: number | null;
+  sprint?: number | null;
 }
 
 export interface MoveItemInput {
@@ -79,7 +87,10 @@ export interface MoveItemInput {
   after?: string;
 }
 
-export type LogOp = "create" | "update" | "delete" | "move" | "link" | "unlink" | "sync";
+export type LogOp = "create" | "update" | "delete" | "move" | "link" | "unlink" | "sync" | "record";
+
+/** What a log entry is about: an item, a metric, or the board settings. */
+export type LogSubject = ItemType | "metric" | "settings";
 
 export interface FieldChange {
   from: unknown;
@@ -91,7 +102,7 @@ export interface LogEntry {
   actor: string;
   op: LogOp;
   id: string;
-  type: ItemType;
+  type: LogSubject;
   title: string;
   changes?: Record<string, FieldChange>;
 }

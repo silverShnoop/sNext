@@ -7,7 +7,10 @@ designed to be driven mostly by your AI agent.
   status, priority, due date and links to external tools (e.g. Jira issues).
 - **Hierarchical UI:** areas as horizontal cards; click one to expand its projects,
   click a project to expand its tasks. Plus a **Next** view (what to do next, with
-  reasons) and an **Activity** feed.
+  reasons), a **Timeline** (the prioritised work packed into the next sprints, then Next
+  and Future) and an **Activity** feed.
+- **Team metrics:** cards at the top of the page with history sparkline, trend and
+  month-on-month change, managed from the CLI (`snext metric ...`).
 - **Markdown storage:** one file per item under `~/.snext/items`, easy to read, diff
   and keep in git.
 - **CLI for everything:** create, update, move, link, delete, import, prioritise, sync.
@@ -34,6 +37,12 @@ snext add project "Payments revamp" -p A-1 -l https://acme.atlassian.net/browse/
 snext add task "Refund flow" -p P-1 --priority high --due 2026-11-14
 snext tree
 snext next
+
+snext sprint config --start 2026-11-02 --weeks 2 --capacity 20
+snext timeline
+
+snext metric add "Change failure rate" -u % --direction down --target 15
+snext metric record change-failure-rate 18
 ```
 
 ### Install the agent skill

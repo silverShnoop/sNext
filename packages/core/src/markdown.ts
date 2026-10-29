@@ -25,6 +25,8 @@ export function serializeItem(item: Item): string {
   if (item.priority) front.priority = item.priority;
   front.rank = item.rank;
   if (item.due) front.due = item.due;
+  if (item.estimate != null) front.estimate = item.estimate;
+  if (item.sprint != null) front.sprint = item.sprint;
   if (item.links.length) front.links = item.links.map(cleanLink);
   front.created = item.created;
   front.updated = item.updated;
@@ -62,6 +64,8 @@ export function parseItem(text: string, source = "item"): Item {
     priority: PRIORITIES.includes(priority as never) ? (priority as Item["priority"]) : undefined,
     rank: Number(front.rank) || 0,
     due: normalizeDate(front.due),
+    estimate: optionalNumber(front.estimate),
+    sprint: optionalNumber(front.sprint),
     links,
     created: str("created") ?? new Date(0).toISOString(),
     updated: str("updated") ?? new Date(0).toISOString(),
@@ -74,6 +78,12 @@ function cleanLink(link: ItemLink): ItemLink {
     if (link[k] != null && link[k] !== "") out[k] = String(link[k]);
   }
   return out;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 /** YAML parses bare dates into Date objects; keep them as YYYY-MM-DD strings. */

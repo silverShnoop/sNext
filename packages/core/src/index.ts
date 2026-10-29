@@ -8,3 +8,7 @@ export * from "./store.js";
 export * from "./priority.js";
 export * from "./sync.js";
 export * from "./import.js";
+export * from "./frontmatter.js";
+export * from "./settings.js";
+export * from "./metrics.js";
+export * from "./timeline.js";

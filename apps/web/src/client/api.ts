@@ -31,6 +31,8 @@ export interface Item {
   priority?: Priority;
   rank: number;
   due?: string;
+  estimate?: number;
+  sprint?: number;
   links: ItemLink[];
   created: string;
   updated: string;
@@ -55,9 +57,67 @@ export interface LogEntry {
   actor: string;
   op: string;
   id: string;
-  type: ItemType;
+  type: ItemType | "metric" | "settings";
   title: string;
   changes?: Record<string, { from: unknown; to: unknown }>;
+}
+
+export interface MetricPoint {
+  date: string;
+  value: number;
+  note?: string;
+}
+
+export interface Metric {
+  id: string;
+  name: string;
+  unit?: string;
+  direction: "up" | "down" | "neutral";
+  target?: number;
+  description: string;
+  history: MetricPoint[];
+  summary: {
+    latest?: MetricPoint;
+    previousMonth?: MetricPoint;
+    mom?: { delta: number; pct: number | null; good: boolean | null };
+    trend?: "up" | "down" | "flat";
+    trendGood?: boolean | null;
+    targetMet?: boolean;
+  };
+}
+
+export interface SprintSettings {
+  start: string;
+  weeks: number;
+  count: number;
+  capacity: number;
+  defaultEstimate: number;
+  nextSprints: number;
+}
+
+export interface TimelineTask extends NextTask {
+  points: number;
+  pinned: boolean;
+  risk?: string;
+}
+
+export interface TimelineBucket {
+  kind: "sprint" | "next" | "future";
+  label: string;
+  number?: number;
+  start?: string;
+  end?: string;
+  capacity?: number;
+  used: number;
+  tasks: TimelineTask[];
+}
+
+export interface Timeline {
+  today: string;
+  currentSprint: { number: number; start: string; end: string };
+  settings: SprintSettings;
+  buckets: TimelineBucket[];
+  blocked: number;
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -75,9 +135,20 @@ export const api = {
   items: () => call<Item[]>("GET", "/items"),
   next: () => call<NextTask[]>("GET", "/next"),
   agents: () => call<Agent[]>("GET", "/agents"),
+  metrics: () => call<Metric[]>("GET", "/metrics"),
+  timeline: () => call<Timeline>("GET", "/timeline"),
+  updateSprintSettings: (sprint: Partial<SprintSettings>) => call<{ sprint: SprintSettings }>("PATCH", "/settings", { sprint }),
   log: (limit = 100) => call<LogEntry[]>("GET", `/log?limit=${limit}`),
   create: (input: Partial<Item> & { type: ItemType; title: string }) => call<Item>("POST", "/items", input),
-  update: (id: string, patch: Partial<Omit<Item, "priority" | "due">> & { priority?: Priority | null; due?: string | null }) =>
+  update: (
+    id: string,
+    patch: Partial<Omit<Item, "priority" | "due" | "estimate" | "sprint">> & {
+      priority?: Priority | null;
+      due?: string | null;
+      estimate?: number | null;
+      sprint?: number | null;
+    },
+  ) =>
     call<Item>("PATCH", `/items/${id}`, patch),
   move: (id: string, input: { parent?: string; before?: string; after?: string }) =>
     call<Item>("POST", `/items/${id}/move`, input),
