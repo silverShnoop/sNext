@@ -1,106 +1,158 @@
-# Prioritisation: requirements draft
+# Planning method: prioritising goals and committing to sprints
 
-Status: **draft for discussion**. A simple baseline (P0 below) is implemented so the
-rest of the system has something to build on. Everything after that is proposed and
-needs a decision; the open questions at the end are the decisions needed.
+Status: **proposal**. This is the method sNext is built around. The parts not built
+yet are listed at the end.
 
-## What prioritisation is for in sNext
+## What sNext is for (and not for)
 
-The name is the brief: sNext answers *"what should I do next?"* Requirements follow
-from three goals:
+sNext is for **deciding and showing what the team works on**, not for running the work.
 
-1. **One clear next action.** At any moment the user (or their agent) can get a short,
-   ordered list of what to work on, with the reason for each position.
-2. **Cheap to maintain.** Priorities that need constant grooming go stale. Most of the
-   signal should come from things that already exist (hierarchy, due dates, Jira
-   status/priority) plus a few deliberate choices by the user.
-3. **Agent-friendly.** The agent should be able to explain, adjust and defend the order
-   in plain language, and act on "X matters more than Y" without a form.
+- **In sNext:** the ranked portfolio of projects, the goals that move each one forward,
+  which sprint each goal is planned for, what the team committed to, and how that went.
+- **In Jira:** the tickets the team creates to hit a goal, plus day-to-day status and
+  assignment. sNext links to Jira but never mirrors it ticket for ticket.
 
-## P0: implemented baseline
+Two audiences, one source:
 
-| Requirement | How it works now |
-|---|---|
-| Priority class per item | `critical`, `high`, `medium`, `low`, or unset. |
-| Inheritance | Unset priority inherits from project, then area, then defaults to `medium`. Shown as a dashed badge in the UI. |
-| Manual order | Every item has a `rank` among its siblings. Reorder with the arrows in the UI or `snext move --before/--after`. |
-| Due dates | Optional `due` (YYYY-MM-DD). Overdue or due within 2 days bumps effective priority up one level. |
-| Next list | `snext next` and the **Next** tab: tasks that are not done or blocked, under projects/areas that are not done, sorted by: in-progress first, effective priority, due date, then area/project/task rank. Each row lists its reasons. |
+| Audience | Question | View |
+|---|---|---|
+| Team | What are we trying to achieve this sprint and next? What's coming? | Sprint goals board |
+| Leadership | What did the team sign up for, did it deliver, and where is its time going? | Roadmap + commitment history + metrics |
 
-| Estimates | Optional `estimate` (points) on tasks; board-wide `defaultEstimate` for the rest. |
-| Sprint timeline | **Timeline** tab and `snext timeline`: the ordered list packed into the current + next sprints by capacity, then Next and Future buckets. Sprint length, count, capacity and start date are configurable (`snext sprint config` or the UI). |
-| Sprint pins | `sprint: N` on a task overrides automatic placement (drag a task onto a column in the UI, or `--sprint next`). |
+## The planning unit: a goal
 
-Design choice: the ordering is a **sort with explicit tie-breakers**, not a weighted
-score. It is easy to predict and explain ("high priority, inherited from Payments; due
-tomorrow"). A scoring model can be added later (P2) without changing the data.
+The third level of the hierarchy is a **goal**: an outcome against a project that can
+be achieved within one sprint and checked at the end of it.
 
-## P1: proposed next
+- Good: "Partial refunds live for card payments behind a flag", "PCI evidence pack
+  submitted to auditor".
+- Not a goal: "Write refund API" (a ticket), "Work on payments" (a project).
 
-1. **Focus list ("Today / This week").** A small, user-curated list pinned above the
-   computed Next list. The agent can propose it each morning from `next`; the user
-   accepts or edits it. Limit its size (e.g. 5) to force choices.
-2. **WIP limit.** Warn (UI and `next`) when more than N tasks are `in_progress`;
-   suggest finishing before starting.
-3. **Blocked-by dependencies.** `blockedBy: [T-12]` on a task. Blocked tasks drop out of
-   Next until their blockers are done, and the blocker inherits the blocked task's
-   priority if higher (so unblocking important work rises).
-4. **Jira priority import.** Map Jira priority on import/sync (Highest/High/Medium/Low/
-   Lowest to critical/high/medium/low/low). Decide whether sNext priority or Jira
-   priority wins when they disagree (see questions).
-5. **Reprioritise in the UI.** Drag-and-drop ordering of areas, projects and tasks
-   (arrows exist now), and a priority quick-picker on each row.
-6. **Explain and override.** "Pin to top" and "snooze until DATE" on any task, both
-   visible as reasons in Next.
+A goal may map to one Jira ticket, an epic, a handful of tickets the team makes during
+the sprint, or nothing in Jira yet. That's fine: the goal is the commitment, and the
+tickets are how the team delivers it.
 
-## P2: options to consider
+Hierarchy: **Area** (team, product or investment theme) > **Project** (multi-sprint body
+of work) > **Goal**.
 
-- **Effort / size** (S/M/L or points) to enable "quick wins" (high value, low effort)
-  and WSJF-style ordering (cost of delay / size).
-- **Scoring model** as an optional mode: e.g. RICE (reach, impact, confidence, effort) or
-  WSJF. Stored per item, computed into a score, still shown with reasons.
-- **Area weighting / capacity split.** e.g. Work 70%, Home 30%: Next interleaves areas
-  in that ratio rather than letting one area dominate.
-- **Staleness.** Items untouched for N weeks get flagged for review (re-confirm, lower,
-  or close), which keeps the list honest.
-- **Deadlines vs targets.** Distinguish a hard deadline (external, penalty) from a soft
-  target date; only hard deadlines bump priority.
-- **Agent review ritual.** A weekly "/snext review" where the agent walks the user
-  through stale, overdue and unprioritised items.
+## Step 1: rank the projects (monthly or quarterly, with leadership)
 
-## Open questions
+Leadership conversations are about projects, not goals, so this is the first and most
+important ordering.
 
-1. **Granularity:** are four priority classes plus manual order enough, or do you want
-   a numeric score / scoring model (RICE, WSJF) from the start?
-2. **Who orders?** Should the manual order (rank) outrank priority class, i.e. a pure
-   stack-ranked backlog, or stay a tie-breaker as now?
-3. **Source of truth:** when Jira priority and sNext priority disagree, which wins? Or is
-   sNext priority purely personal (your view, never written back to Jira)?
-4. **Inheritance:** should areas and projects carry priority at all, or only tasks?
-   Should a task ever be allowed to outrank its project?
-5. **Due dates:** is the 2-day "urgent" window right? Should urgency escalate further
-   (e.g. two levels when overdue)?
-6. **Focus list:** daily, weekly, or both? Should the agent propose it automatically on
-   /snext, or only when asked?
-7. **Effort:** do you want sizing at all? If so, T-shirt sizes or points?
-8. **Balance across areas:** do you want capacity splits between areas, or should Next
-   be a single global order?
-9. **Blocked work:** besides explicit dependencies, should "waiting on someone" be a
-   distinct state with a follow-up date?
-10. **Projects in Next:** should projects with no tasks appear as "needs breaking down"?
+1. **Split capacity across areas** (investment mix), e.g. Product 60%, Platform 25%,
+   KTLO/support 15%. Agreed with leadership, revisited quarterly. This answers "where
+   is the time going?" before any argument about individual items.
+2. **Stack rank the projects** within each area. No ties: one project is always above
+   another. Use cost of delay (step 2) to argue the order, but the final order is a
+   decision, not a formula.
+3. Mark any **hard deadline** (external commitment, regulatory, contractual) on the
+   project. Deadlines are the only thing allowed to jump the rank.
 
-### Timeline
+## Step 2: score candidate goals (lightweight WSJF)
 
-11. **Packing:** sprints fill strictly in priority order, so a sprint can close with
-    spare points rather than let a lower-priority small task jump ahead. Would you rather
-    backfill spare capacity with the next task that fits?
-12. **Capacity:** one number per sprint for now. Do you need per-sprint overrides
-    (holidays, on-call), or capacity per person / per area?
-13. **Pins:** pins are absolute sprint numbers, so changing the sprint start or length
-    shifts them. Should pins instead store the sprint's start date?
-14. **Next vs Future:** Next is "the following N sprints of capacity". Would you rather
-    have it as a fixed date horizon (e.g. next quarter)?
-15. **Done work:** the timeline shows open work only. Should the current sprint also
-    show what was completed in it (needs a completion date on tasks)?
-16. **Jira sprints:** should sNext read the actual Jira sprint assignment as the pin (via
-    the agent sync) when an issue is in a sprint?
+For each project near the top, the team drafts the next 2-4 goals and scores each on
+three 1-5 scales, which takes about two minutes a goal:
+
+| Factor | 1 | 3 | 5 |
+|---|---|---|---|
+| **Value**: impact on users, revenue or risk | nice to have | clear benefit | critical |
+| **Urgency**: cost of waiting a sprint | none | value decays | deadline / blocking others |
+| **Unblocks**: enables other goals or reduces risk | none | some | key dependency |
+
+**Size** is a T-shirt estimate of how much of one sprint's capacity the goal takes:
+
+| Size | XS | S | M | L |
+|---|---|---|---|---|
+| Share of sprint | ~10% | ~20% | ~35% | ~60% |
+
+Anything bigger than L is not a goal yet; split it.
+
+**Score = (Value + Urgency + Unblocks) / Size points** (XS=1, S=2, M=3, L=5). That's
+weighted shortest job first: high cost of delay and small size float up.
+
+Order goals by **project rank first, then score within the project**, with two
+exceptions:
+
+- a goal with a hard deadline that would otherwise miss it moves up;
+- the top-scoring goal of a lower project may go above a weak goal of a higher project
+  if the team agrees (record why).
+
+sNext computes and displays the score but always lets you override the order by hand.
+The score is there to start the argument, not to end it.
+
+## Step 3: fill sprints from the ranked list
+
+1. **Plan to about 70-80% of capacity.** Reserve the rest for support, incidents and
+   unplanned work. Reserve the KTLO share from step 1 explicitly.
+2. Walk the ranked list and drop goals into the current sprint, then the next ones,
+   until each is full. Respect each area's capacity split within a sprint where
+   possible.
+3. After the visible sprints, the list continues as **Next** (the following few sprints
+   of capacity) and **Future** (ranked but not scheduled). This is a Now / Next / Later
+   roadmap that falls straight out of the ranking.
+4. **Pin** a goal to a sprint when the date matters more than the rank (a launch, a
+   dependency on another team).
+
+## Step 4: commit at sprint planning
+
+At sprint planning the team reviews the proposed goals for the sprint, adjusts them and
+**commits**. sNext snapshots the committed set; it becomes what the team signed up to.
+
+During the sprint:
+
+- New goals added after commit are marked **added**.
+- Goals pulled out are marked **dropped** (with a one-line reason).
+- Jira is where the work happens; the agent can roll up progress from linked tickets
+  (e.g. 4 of 7 done) without anyone updating sNext by hand.
+
+## Step 5: review at sprint end
+
+Each committed goal is closed as **met**, **partly met**, **missed** or **dropped**, with
+an optional one-line note. Missed or partly met goals either roll over (re-ranked) or go
+back into the list.
+
+That gives leadership two honest numbers over time, recorded automatically as team
+metrics:
+
+- **Say/do ratio**: goals met ÷ goals committed (aim for about 80%. Consistently 100%
+  means the team is under-committing; much lower means it is over-committing or being
+  disrupted).
+- **Planned vs unplanned**: share of the sprint spent on committed goals versus added or
+  support work.
+
+## Cadence
+
+| When | Who | What | sNext support |
+|---|---|---|---|
+| Quarterly / monthly | Lead + leadership | Capacity split, project rank, deadlines | Roadmap view, metrics |
+| Weekly / ad hoc | Lead + agent | Draft and score goals for top projects | `/snext` with the agent; score + rank |
+| Sprint planning | Team | Review proposal, adjust, **commit** | Sprint board, commit |
+| During sprint | Agent | Roll up Jira progress, flag risk | Cheap sync |
+| Sprint review | Team (+ leadership) | Close goals: met / missed, roll over | Close sprint, say/do metric |
+
+## What this means for the current build
+
+Already built and kept: the hierarchy, manual ranking, sprint settings and capacity
+packing, pins, the Next and Future buckets, team metrics, Jira links and the agent sync.
+
+To build:
+
+1. Rename the third level from **task** to **goal** in the UI, CLI and docs.
+2. Add **value / urgency / unblocks / size** fields and the computed score. Order is
+   project rank, then score, with manual override. Replace points with T-shirt size
+   (or keep points as an option).
+3. **Capacity reserve** (planned load %) and **area capacity split** in settings.
+4. **Sprint commitments**: `snext sprint commit`, added/dropped tracking,
+   `snext sprint close` with outcomes and roll-over. One markdown file per sprint
+   (`sprints/sprint-22.md`) as the permanent record.
+5. Automatic **say/do** and **planned vs unplanned** metrics from sprint closes.
+6. **Roadmap view** for leadership: projects as rows, sprints / Next / Future as
+   columns, showing committed vs proposed and outcomes for past sprints, plus capacity
+   by area against the agreed split.
+7. **Shareable snapshot**: since the app runs on localhost, `snext report` exports a
+   static HTML or markdown page of the roadmap and last sprint's results to send to
+   leadership or paste into Confluence.
+8. Jira roll-up: a goal links to an epic, a JQL filter or a set of tickets; the agent
+   sync reports progress (done / total) instead of mirroring a single status.
+9. Drop or demote the daily-task framing (the **Next** tab becomes the ranked goal list).
